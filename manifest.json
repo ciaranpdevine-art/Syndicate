@@ -1,0 +1,15 @@
+{
+  "name": "Lads Night Out",
+  "short_name": "LNO",
+  "description": "Syndicate ledger, pot tracker and Lotto log",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0C2B22",
+  "theme_color": "#0C2B22",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
