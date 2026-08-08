@@ -1,0 +1,1582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Lads Night Out — Ledger</title>
+
+<!-- PWA setup -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0C2B22">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="LNO">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --felt:#0C2B22;
+    --felt-dark:#081F18;
+    --felt-line:rgba(212,169,74,0.14);
+    --paper:#F4EFE1;
+    --paper-dim:#E9E1CA;
+    --ink:#221E15;
+    --ink-soft:#6B6650;
+    --gold:#D4A94A;
+    --gold-dim:#8C7231;
+    --red:#C1443C;
+    --green-win:#3F8F5F;
+    --line:rgba(34,30,21,0.14);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--felt);color:var(--paper);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+  .display{font-family:'Anton',sans-serif;letter-spacing:0.03em;text-transform:uppercase;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+
+  body::before{
+    content:"";
+    position:fixed;inset:0;pointer-events:none;z-index:0;
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255,255,255,0.012) 3px, rgba(255,255,255,0.012) 4px);
+  }
+
+  header{padding:26px 16px 0;position:sticky;top:0;background:var(--felt);z-index:20;border-bottom:1px solid var(--felt-line);}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:4px;}
+  .brand .chip{width:10px;height:10px;border-radius:50%;background:var(--gold);box-shadow:0 0 8px rgba(212,169,74,0.7);}
+  .brand h1{font-size:26px;margin:0;color:var(--paper);}
+  .brand .sub{color:var(--gold-dim);font-size:11px;text-transform:uppercase;letter-spacing:0.16em;margin:0 0 18px 20px;}
+
+  /* Ticket-stub tab nav */
+  nav.tabs{display:flex;gap:0;position:relative;}
+  nav.tabs button{
+    flex:1;background:transparent;border:none;color:var(--gold-dim);
+    font-family:'Anton',sans-serif;letter-spacing:0.06em;text-transform:uppercase;
+    font-size:13px;padding:12px 4px 16px;cursor:pointer;position:relative;
+  }
+  nav.tabs button.active{color:var(--paper);}
+  nav.tabs button::after{
+    content:"";position:absolute;left:10%;right:10%;bottom:0;height:2px;background:transparent;
+  }
+  nav.tabs button.active::after{background:var(--gold);}
+  nav.tabs{border-bottom:1px dashed var(--felt-line);}
+  nav.tabs button + button{border-left:1px dashed var(--felt-line);}
+
+  main{position:relative;z-index:1;padding:20px 16px 90px;max-width:640px;margin:0 auto;}
+  .view{display:none;}
+  .view.active{display:block;animation:fade .25s ease;}
+  @keyframes fade{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+
+  /* Tote board */
+  .tote-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:22px;}
+  .tote-card{
+    background:var(--felt-dark);border:1px solid var(--felt-line);border-radius:10px;
+    padding:14px 14px 12px;
+  }
+  .tote-card.pot{grid-column:1/-1;background:linear-gradient(135deg, #0F3327, #0A2119);border-color:rgba(212,169,74,0.35);}
+  .tote-label{font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--gold-dim);margin-bottom:6px;}
+  .tote-value{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:26px;color:var(--paper);letter-spacing:0.01em;}
+  .tote-card.pot .tote-value{font-size:34px;color:var(--gold);text-shadow:0 0 14px rgba(212,169,74,0.35);}
+  .tote-value.red{color:var(--red);}
+  .tote-value.win{color:var(--green-win);}
+  .tote-carry{display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:11px;color:var(--gold-dim);}
+  .link-btn.light{color:var(--gold-dim);text-decoration:underline;}
+
+  .section-title{font-family:'Anton',sans-serif;letter-spacing:0.05em;text-transform:uppercase;font-size:15px;color:var(--paper);margin:26px 0 10px;display:flex;align-items:center;gap:8px;}
+  .section-title::after{content:"";flex:1;height:1px;background:var(--felt-line);}
+
+  .loc-row{display:flex;gap:10px;}
+  .loc-card{flex:1;background:var(--paper);color:var(--ink);border-radius:10px;padding:12px;position:relative;overflow:hidden;}
+  .loc-card::before{content:"";position:absolute;top:0;left:0;right:0;height:4px;background:var(--gold);}
+  .loc-name{font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--ink-soft);margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;gap:4px;}
+  .loc-amt{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:17px;}
+  .loc-amt-input{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:17px;width:100%;border:none;border-bottom:1px solid var(--line);background:transparent;color:var(--ink);padding:2px 0;}
+  .loc-amt-input:focus{outline:none;border-bottom-color:var(--felt);}
+  .loc-row{flex-wrap:wrap;}
+  .loc-card{flex:1 1 calc(50% - 5px);min-width:120px;}
+  .loc-del{background:none;border:none;color:var(--ink-soft);opacity:0.5;cursor:pointer;font-size:11px;padding:0;line-height:1;}
+  .loc-del:hover{opacity:1;color:var(--red);}
+  .add-source-inline{display:flex;gap:8px;margin-top:10px;}
+  .add-source-inline input{flex:1;padding:9px 10px;border-radius:7px;border:1px solid var(--felt-line);background:var(--felt-dark);color:var(--paper);font-size:13px;}
+  .add-source-inline button{padding:9px 14px;border-radius:7px;border:1px dashed var(--gold-dim);background:transparent;color:var(--gold);font-family:'Anton',sans-serif;letter-spacing:0.04em;text-transform:uppercase;font-size:11px;cursor:pointer;white-space:nowrap;}
+  .loc-actions{display:flex;gap:8px;margin-top:10px;}
+  .loc-actions .add-btn{margin-top:0;}
+  .link-btn{background:none;border:none;color:var(--ink-soft);font-size:11px;text-decoration:underline;cursor:pointer;padding:2px 0;font-family:'Inter',sans-serif;}
+  .new-source-inline{display:none;gap:8px;margin-top:6px;}
+  .new-source-inline.open{display:flex;}
+  .new-source-inline input{flex:1;padding:8px 9px;border-radius:6px;border:1px solid var(--line);background:#fff;color:var(--ink);font-size:13px;}
+  .new-source-inline button{padding:8px 12px;border-radius:6px;border:none;background:var(--felt);color:var(--gold);font-size:11px;font-weight:700;text-transform:uppercase;cursor:pointer;white-space:nowrap;}
+  .transfer-item{display:flex;justify-content:space-between;align-items:center;padding:10px 18px;font-size:13px;border-bottom:1px solid var(--line);}
+  .transfer-item:last-child{border-bottom:none;}
+  .transfer-item .route{font-weight:600;}
+  .transfer-item .route .arrow{color:var(--ink-soft);margin:0 4px;}
+  .transfer-item .tdate{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink-soft);display:block;margin-top:2px;}
+  .transfer-item .amt{font-family:'IBM Plex Mono',monospace;font-weight:700;}
+  .held-in-check{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;font-size:12px;margin:2px 0 10px;}
+  .held-in-check.ok{background:rgba(63,143,95,0.12);color:var(--green-win);}
+  .held-in-check.warn{background:rgba(193,68,60,0.14);color:var(--red);}
+
+  .checkbox-row{display:flex;align-items:flex-start;gap:8px;margin-top:14px;padding:10px;background:var(--paper-dim);border-radius:8px;}
+  .checkbox-row input[type=checkbox]{width:17px;height:17px;margin-top:1px;accent-color:var(--felt);flex-shrink:0;}
+  .checkbox-row label{margin:0;font-size:12px;text-transform:none;letter-spacing:0;color:var(--ink);line-height:1.4;}
+  .bet-counted{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--green-win);text-transform:uppercase;letter-spacing:0.05em;margin-top:6px;font-weight:700;}
+
+  /* Ticket / paper cards used in Members + Bets */
+  .ticket{
+    background:var(--paper);color:var(--ink);border-radius:10px;margin-bottom:10px;
+    position:relative;overflow:hidden;
+  }
+  .ticket-notch{position:absolute;top:50%;transform:translateY(-50%);width:16px;height:16px;border-radius:50%;background:var(--felt);}
+  .ticket-notch.left{left:-8px;}
+  .ticket-notch.right{right:-8px;}
+  .ticket-row{padding:14px 18px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:10px;}
+  .ticket-row .name{font-weight:700;font-size:15px;}
+  .ticket-row .meta{font-size:11px;color:var(--ink-soft);margin-top:2px;}
+  .ticket-row .right{text-align:right;}
+  .ticket-row .amt{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:16px;}
+  .progress{height:4px;background:var(--paper-dim);border-radius:2px;margin-top:8px;overflow:hidden;}
+  .progress-fill{height:100%;background:var(--green-win);}
+  .progress-fill.short{background:var(--red);}
+  .owed-back{font-size:11px;color:var(--gold-dim);font-weight:600;margin-top:6px;}
+
+  .ticket-detail{
+    border-top:1px dashed var(--line);padding:12px 18px 16px;display:none;background:var(--paper-dim);
+  }
+  .ticket-detail.open{display:block;}
+  .pay-item{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;}
+  .pay-item:last-of-type{border-bottom:none;}
+  .pay-item .src{display:inline-block;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-soft);background:rgba(34,30,21,0.06);padding:2px 6px;border-radius:4px;margin-left:6px;}
+  .pay-item .amt{font-family:'IBM Plex Mono',monospace;font-weight:600;}
+  .del-btn{background:none;border:none;color:var(--red);cursor:pointer;font-size:15px;padding:2px 6px;line-height:1;opacity:0.6;}
+  .del-btn:hover{opacity:1;}
+  .empty-note{color:var(--ink-soft);font-size:12px;padding:6px 0;font-style:italic;}
+
+  /* Forms */
+  .add-btn{
+    width:100%;background:transparent;border:1px dashed var(--gold-dim);color:var(--gold);
+    font-family:'Anton',sans-serif;letter-spacing:0.05em;text-transform:uppercase;font-size:13px;
+    padding:12px;border-radius:10px;cursor:pointer;margin-top:4px;
+  }
+  .add-btn:active{background:rgba(212,169,74,0.08);}
+  .form-panel{
+    background:var(--paper);color:var(--ink);border-radius:10px;padding:16px;margin-top:8px;display:none;
+  }
+  .form-panel.open{display:block;animation:fade .2s ease;}
+  .form-panel label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ink-soft);margin:10px 0 4px;}
+  .form-panel label:first-of-type{margin-top:0;}
+  .form-panel input,.form-panel select{
+    width:100%;padding:10px 10px;border-radius:7px;border:1px solid var(--line);
+    background:#fff;color:var(--ink);font-size:14px;font-family:'Inter',sans-serif;
+  }
+  .form-actions{display:flex;gap:8px;margin-top:16px;}
+  .btn{flex:1;padding:11px;border-radius:8px;border:none;font-weight:700;font-size:13px;cursor:pointer;text-transform:uppercase;letter-spacing:0.04em;}
+  .btn.primary{background:var(--felt);color:var(--gold);}
+  .btn.ghost{background:var(--paper-dim);color:var(--ink-soft);}
+  .btn:disabled{opacity:0.5;}
+
+  .bet-row{padding:14px 18px;}
+  .bet-top{display:flex;justify-content:space-between;align-items:baseline;}
+  .bet-date{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);}
+  .bet-who{font-weight:700;font-size:14px;margin-top:2px;}
+  .bet-comment{font-size:12px;color:var(--ink-soft);font-style:italic;margin-top:6px;}
+  .bet-nums{display:flex;gap:16px;margin-top:8px;}
+  .bet-num{font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:0.06em;}
+  .bet-num b{display:block;font-family:'IBM Plex Mono',monospace;color:var(--ink);font-size:14px;font-weight:700;margin-top:1px;}
+  .bet-num.profit b.pos{color:var(--green-win);}
+  .bet-num.profit b.neg{color:var(--red);}
+  .screenshot-note{font-size:10px;color:var(--ink-soft);opacity:0.7;margin-top:8px;font-style:italic;}
+  .shot-badge{font-size:10px;color:var(--gold-dim);margin-top:8px;font-weight:600;}
+  .shot-badge.dim{color:var(--ink-soft);opacity:0.7;font-weight:400;}
+  .bet-shot-img{width:100%;border-radius:8px;display:block;border:1px solid var(--line);}
+  .lotto-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+  .lotto-tag{font-size:10px;text-transform:uppercase;letter-spacing:0.05em;padding:3px 8px;border-radius:20px;font-weight:700;}
+  .lotto-tag.day{background:rgba(34,30,21,0.08);color:var(--ink-soft);}
+  .lotto-tag.pot{background:rgba(193,68,60,0.12);color:var(--red);}
+  .lotto-tag.personal{background:rgba(63,143,95,0.12);color:var(--green-win);}
+  .lotto-tag.won{background:var(--gold);color:var(--ink);}
+  .lotto-edit{border-top:1px dashed var(--line);padding:12px 18px 16px;display:none;background:var(--paper-dim);}
+  .lotto-edit.open{display:block;}
+
+  .empty-state{text-align:center;padding:40px 20px;color:var(--gold-dim);}
+  .empty-state .display{font-size:20px;color:var(--paper);margin-bottom:6px;}
+  .empty-state p{font-size:13px;margin:0;}
+
+  .toast{
+    position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:var(--paper);color:var(--ink);padding:10px 18px;border-radius:20px;font-size:13px;font-weight:600;
+    opacity:0;transition:all .25s ease;pointer-events:none;z-index:50;box-shadow:0 6px 20px rgba(0,0,0,0.3);
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  select{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path fill='%23221E15' d='M5 7l5 6 5-6z'/></svg>");background-repeat:no-repeat;background-position:right 10px center;}
+
+  /* Lock bar */
+  .lock-bar{display:flex;justify-content:space-between;align-items:center;padding:9px 2px 12px;font-size:11px;color:var(--gold-dim);gap:10px;flex-wrap:wrap;}
+  .lock-bar .link-btn.light{flex-shrink:0;}
+
+  /* Compact inline setting row (e.g. Buy-in Owed) */
+  .inline-setting-row{margin-top:28px;padding-top:14px;border-top:1px dashed var(--felt-line);}
+  .inline-setting-label{display:block;font-size:11px;color:var(--gold-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;}
+  .inline-setting-controls{display:flex;align-items:center;gap:10px;}
+  .inline-setting-controls input{flex:1;padding:9px 10px;border-radius:7px;border:1px solid var(--felt-line);background:var(--felt-dark);color:var(--paper);font-size:14px;font-family:'IBM Plex Mono',monospace;}
+  .inline-setting-controls .link-btn.light{flex-shrink:0;}
+
+  /* PIN modal */
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(5,10,8,0.72);display:none;
+    align-items:center;justify-content:center;z-index:60;padding:20px;
+  }
+  .modal-overlay.open{display:flex;}
+  .modal-card{background:var(--paper);color:var(--ink);border-radius:12px;padding:20px;width:100%;max-width:320px;}
+  .modal-title{font-family:'Anton',sans-serif;letter-spacing:0.03em;text-transform:uppercase;font-size:17px;margin-bottom:12px;}
+  .modal-card input{width:100%;padding:11px 12px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);font-size:16px;letter-spacing:0.1em;font-family:'IBM Plex Mono',monospace;}
+  .modal-hint{font-size:11px;color:var(--ink-soft);margin-top:8px;line-height:1.4;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="chip"></div>
+    <h1 class="display">Lads Night Out</h1>
+  </div>
+  <p class="sub">Ledger &amp; Pot Tracker</p>
+  <nav class="tabs">
+    <button class="tab-btn active" data-view="overview">Overview</button>
+    <button class="tab-btn" data-view="members">Members</button>
+    <button class="tab-btn" data-view="bets">Bets</button>
+    <button class="tab-btn" data-view="lotto">Lotto</button>
+  </nav>
+  <div class="lock-bar" id="lockBar"></div>
+</header>
+
+<main>
+
+  <!-- OVERVIEW -->
+  <section id="overview" class="view active">
+    <div class="tote-grid" id="toteGrid"></div>
+    <div class="section-title">Held In</div>
+    <div class="modal-hint" style="margin-bottom:10px;">Manually entered — update these yourself to match what's actually sitting in each pot.</div>
+    <div class="loc-row" id="locRow"></div>
+    <div id="heldInCheck"></div>
+    <div class="loc-actions">
+      <button class="add-btn" id="saveHeldIn" style="flex:1;">Save Balances</button>
+      <button class="add-btn" id="showAddSource">+ Add Source</button>
+    </div>
+    <div class="form-panel" id="addSourceForm">
+      <label>Source name</label>
+      <div class="add-source-inline">
+        <input type="text" id="sourceName" placeholder="e.g. Revolut, Bank Transfer">
+        <button class="btn primary" id="saveAddSource" style="flex:none;">Add</button>
+      </div>
+      <div class="form-actions">
+        <button class="btn ghost" id="cancelAddSource">Cancel</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- MEMBERS -->
+  <section id="members" class="view">
+    <div id="membersList"></div>
+    <button class="add-btn" id="showAddMember">+ Add Member</button>
+    <div class="form-panel" id="addMemberForm">
+      <label>Name</label>
+      <input type="text" id="memberName" placeholder="e.g. Jordan">
+      <div class="form-actions">
+        <button class="btn ghost" id="cancelAddMember">Cancel</button>
+        <button class="btn primary" id="saveAddMember">Add Member</button>
+      </div>
+    </div>
+
+    <div class="inline-setting-row">
+      <span class="inline-setting-label">Buy-in owed (£, applies to everyone)</span>
+      <div class="inline-setting-controls">
+        <input type="number" id="buyInAmountInput" min="0" step="0.01">
+        <button class="link-btn light" id="saveBuyInAmount">Save</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- BETS -->
+  <section id="bets" class="view">
+    <div id="betsList"></div>
+    <button class="add-btn" id="showAddBet">+ Log a Bet</button>
+    <div class="form-panel" id="addBetForm">
+      <label>Date</label>
+      <input type="date" id="betDate">
+      <label>Placed by</label>
+      <select id="betMember">
+        <option value="GROUP">🤝 Group</option>
+      </select>
+      <label>Comment (optional)</label>
+      <input type="text" id="betComment" placeholder="e.g. World Cup Final bet">
+      <label>Stake (£)</label>
+      <input type="number" id="betStake" placeholder="20" min="0" step="0.01">
+      <label>Value won (£)</label>
+      <input type="number" id="betWon" placeholder="0" min="0" step="0.01">
+      <div class="checkbox-row" id="betCountsPaymentRow">
+        <input type="checkbox" id="betCountsPayment">
+        <label for="betCountsPayment">Count this stake toward the member's buy-in balance (use if they staked it directly from their own money, not the pot)</label>
+      </div>
+      <div class="form-actions">
+        <button class="btn ghost" id="cancelAddBet">Cancel</button>
+        <button class="btn primary" id="saveAddBet">Log Bet</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- LOTTO -->
+  <section id="lotto" class="view">
+    <div class="section-title">Settings</div>
+    <div class="loc-row" style="margin-bottom:4px;">
+      <div class="loc-card" style="flex:1;">
+        <div class="loc-name">Paid by</div>
+        <select id="lottoDefaultPayerSelect" style="margin-top:4px;"></select>
+      </div>
+    </div>
+    <div class="form-panel open" style="margin-top:10px;">
+      <label>First Bet Date</label>
+      <input type="date" id="lottoFirstDateInput">
+      <div class="modal-hint">Set the date of the first £5 entry. Every Wednesday and Saturday from then to today gets filled in automatically, and it'll keep filling itself in going forward.</div>
+      <div class="form-actions">
+        <button class="btn primary" id="saveLottoFirstDate" style="flex:1;">Save</button>
+      </div>
+    </div>
+    <div class="form-panel open" style="margin-top:10px;">
+      <label>Switch to Pot Funding From</label>
+      <input type="date" id="lottoPotDateInput">
+      <div class="modal-hint">Once winnings are covering the stake instead of the payer's own money — e.g. after a win — set the date it switched. Every entry from that date on is updated to come out of the pot; earlier entries stay as the payer's own payment. Leave blank if it should always be personal.</div>
+      <div class="form-actions">
+        <button class="btn primary" id="saveLottoPotDate" style="flex:1;">Save</button>
+      </div>
+    </div>
+    <div class="section-title" style="margin-top:22px;">Entries</div>
+    <div id="lottoList"></div>
+    <button class="add-btn" id="showAddLotto">+ Log Lotto Entry</button>
+    <div class="form-panel" id="addLottoForm">
+      <label>Date</label>
+      <input type="date" id="lottoDate">
+      <div class="modal-hint" id="lottoDayHint" style="margin-top:2px;"></div>
+      <label>Stake (£)</label>
+      <input type="number" id="lottoStake" value="5" min="0" step="0.01">
+      <label>Paid by</label>
+      <select id="lottoPayer"></select>
+      <div class="checkbox-row">
+        <input type="checkbox" id="lottoFromPot">
+        <label for="lottoFromPot">Cover this from the current pot instead — don't count it as this member's payment</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="lottoWonAtCreate">
+        <label for="lottoWonAtCreate">This draw already won</label>
+      </div>
+      <div id="lottoWonAmountRow" style="display:none;">
+        <label>Amount won (£)</label>
+        <input type="number" id="lottoWonAmount" value="255" min="0" step="0.01">
+      </div>
+      <div class="form-actions">
+        <button class="btn ghost" id="cancelAddLotto">Cancel</button>
+        <button class="btn primary" id="saveAddLotto">Save Entry</button>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal-overlay" id="pinOverlay">
+  <div class="modal-card">
+    <div class="modal-title" id="pinModalTitle">Enter PIN</div>
+    <input type="password" inputmode="numeric" id="pinInput" placeholder="PIN" maxlength="12">
+    <div id="pinExtraHint" class="modal-hint"></div>
+    <div class="form-actions">
+      <button class="btn ghost" id="pinCancelBtn">Cancel</button>
+      <button class="btn primary" id="pinConfirmBtn">Unlock</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// FIREBASE SETUP — paste your project's config below, then
+// everything else in this file works exactly as it did before.
+// ============================================================
+const firebaseConfig = {
+  apiKey: "AIzaSyCQk2MqNP5YcJjL4RTsXXDGYc7S7BOPn7I",
+  authDomain: "syndicate-88de0.firebaseapp.com",
+  projectId: "syndicate-88de0",
+  storageBucket: "syndicate-88de0.firebasestorage.app",
+  messagingSenderId: "856850117049",
+  appId: "1:856850117049:web:b5802ef7cb62a57f394668"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const FS_COLLECTION = 'syndicate';
+
+// Drop-in replacement for the Claude-artifact window.storage API,
+// backed by Firestore instead. Every get/set/delete/list call
+// elsewhere in this file is unchanged.
+window.storage = {
+  async get(key, shared){
+    const snap = await db.collection(FS_COLLECTION).doc(key).get();
+    if(!snap.exists) throw new Error('not found');
+    return { key, value: snap.data().value, shared: !!shared };
+  },
+  async set(key, value, shared){
+    await db.collection(FS_COLLECTION).doc(key).set({
+      value,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    return { key, value, shared: !!shared };
+  },
+  async delete(key, shared){
+    await db.collection(FS_COLLECTION).doc(key).delete();
+    return { key, deleted: true, shared: !!shared };
+  },
+  async list(prefix, shared){
+    const snap = await db.collection(FS_COLLECTION).get();
+    const keys = snap.docs.map(d => d.id).filter(k => !prefix || k.startsWith(prefix));
+    return { keys, prefix, shared: !!shared };
+  }
+};
+// ============================================================
+
+// Register the service worker so the browser offers an "Install app" /
+// "Add to Home Screen" prompt.
+if('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+
+let members = [];
+let payments = [];
+let bets = [];
+let sources = ['PayPal','Monzo','Cash'];
+let potBalances = {};
+let lottoEntries = [];
+let lottoDefaultPayer = null;
+let lottoFirstDate = null;
+let lottoPotFundingDate = null;
+let startingPot = 50;
+let buyInAmount = 50;
+let carryFormOpen = false;
+let pin = null;
+let unlocked = false;
+let pinModalMode = 'unlock';
+const BET_STAKE_SOURCE = 'Bet Stake';
+
+const fmt = (n) => (n<0?'-£':'£') + Math.abs(n).toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2});
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const todayISO = () => new Date().toISOString().slice(0,10);
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 1800);
+}
+
+// ---------- Storage ----------
+async function loadAll(){
+  try{
+    const m = await window.storage.get('syn:members', true);
+    members = m ? JSON.parse(m.value) : [];
+  }catch(e){ members = []; }
+  try{
+    const p = await window.storage.get('syn:payments', true);
+    payments = p ? JSON.parse(p.value) : [];
+  }catch(e){ payments = []; }
+  try{
+    const b = await window.storage.get('syn:bets', true);
+    bets = b ? JSON.parse(b.value) : [];
+  }catch(e){ bets = []; }
+  try{
+    const s = await window.storage.get('syn:sources', true);
+    sources = s ? JSON.parse(s.value) : ['PayPal','Monzo','Cash'];
+  }catch(e){ sources = ['PayPal','Monzo','Cash']; }
+  try{
+    const pb = await window.storage.get('syn:potBalances', true);
+    potBalances = pb ? JSON.parse(pb.value) : {};
+  }catch(e){ potBalances = {}; }
+  try{
+    const sp = await window.storage.get('syn:startingPot', true);
+    if(sp){ startingPot = parseFloat(sp.value) || 0; }
+    else { startingPot = 50; await saveStartingPot(); }
+  }catch(e){ startingPot = 50; await saveStartingPot(); }
+  try{
+    const ba = await window.storage.get('syn:buyInAmount', true);
+    if(ba){ buyInAmount = parseFloat(ba.value) || 0; }
+    else { buyInAmount = 50; await saveBuyInAmount(); }
+  }catch(e){ buyInAmount = 50; await saveBuyInAmount(); }
+  try{
+    const pn = await window.storage.get('syn:pin', true);
+    pin = pn ? pn.value : null;
+  }catch(e){ pin = null; }
+  try{
+    const lo = await window.storage.get('syn:lotto', true);
+    lottoEntries = lo ? JSON.parse(lo.value) : [];
+  }catch(e){ lottoEntries = []; }
+  try{
+    const ldp = await window.storage.get('syn:lottoDefaultPayer', true);
+    lottoDefaultPayer = ldp ? ldp.value : null;
+  }catch(e){ lottoDefaultPayer = null; }
+  try{
+    const lfd = await window.storage.get('syn:lottoFirstDate', true);
+    lottoFirstDate = lfd ? lfd.value : null;
+  }catch(e){ lottoFirstDate = null; }
+  try{
+    const lpd = await window.storage.get('syn:lottoPotFundingDate', true);
+    lottoPotFundingDate = lpd ? lpd.value : null;
+  }catch(e){ lottoPotFundingDate = null; }
+}
+async function saveMembers(){
+  try{ await window.storage.set('syn:members', JSON.stringify(members), true); }
+  catch(e){ showToast('Could not save — try again'); }
+}
+async function savePayments(){
+  try{ await window.storage.set('syn:payments', JSON.stringify(payments), true); }
+  catch(e){ showToast('Could not save — try again'); }
+}
+async function saveBets(){
+  try{ await window.storage.set('syn:bets', JSON.stringify(bets), true); }
+  catch(e){ showToast('Could not save — try again'); }
+}
+async function saveSources(){
+  try{ await window.storage.set('syn:sources', JSON.stringify(sources), true); }
+  catch(e){ showToast('Could not save — try again'); }
+}
+async function saveStartingPot(){
+  try{ await window.storage.set('syn:startingPot', String(startingPot), true); }
+  catch(e){ showToast('Could not save — try again'); }
+}
+async function saveBuyInAmount(){
+  try{ await window.storage.set('syn:buyInAmount', String(buyInAmount), true); }
+  catch(e){ showToast('Could not save — try again'); }
+}
+async function savePin(){
+  try{ await window.storage.set('syn:pin', pin, true); }
+  catch(e){ showToast('Could not save PIN — try again'); }
+}
+async function saveLotto(){
+  try{ await window.storage.set('syn:lotto', JSON.stringify(lottoEntries), true); }
+  catch(e){ showToast('Could not save — try again'); }
+}
+async function saveLottoDefaultPayer(){
+  try{ await window.storage.set('syn:lottoDefaultPayer', lottoDefaultPayer || '', true); }
+  catch(e){ showToast('Could not save — try again'); }
+}
+async function saveLottoFirstDate(){
+  try{ await window.storage.set('syn:lottoFirstDate', lottoFirstDate || '', true); }
+  catch(e){ showToast('Could not save — try again'); }
+}
+async function saveLottoPotFundingDate(){
+  try{ await window.storage.set('syn:lottoPotFundingDate', lottoPotFundingDate || '', true); }
+  catch(e){ showToast('Could not save — try again'); }
+}
+async function savePotBalances(){
+  try{ await window.storage.set('syn:potBalances', JSON.stringify(potBalances), true); }
+  catch(e){ showToast('Could not save — try again'); }
+}
+
+// ---------- Computations ----------
+function memberPaid(id){ return payments.filter(p=>p.memberId===id).reduce((s,p)=>s+p.value,0); }
+function totals(){
+  const totalPaid = payments.reduce((s,p)=>s+p.value,0);
+  const totalBuyIn = members.reduce((s,m)=>s+(m.buyIn||0),0);
+  const leftToPay = Math.max(0, totalBuyIn - totalPaid);
+  const gambled = bets.reduce((s,b)=>s+b.stake,0) + lottoEntries.reduce((s,l)=>s+l.stake,0);
+  const won = bets.reduce((s,b)=>s+b.won,0) + lottoEntries.reduce((s,l)=>s+(l.won?(l.wonAmount||0):0),0);
+  const pot = totalPaid - gambled + won + startingPot;
+  return {totalPaid, totalBuyIn, leftToPay, gambled, won, pot};
+}
+
+// ---------- Render: Overview ----------
+function renderOverview(){
+  const t = totals();
+  const grid = document.getElementById('toteGrid');
+  grid.innerHTML = `
+    <div class="tote-card">
+      <div class="tote-label">Paid In</div>
+      <div class="tote-value">${fmt(t.totalPaid)}</div>
+    </div>
+    <div class="tote-card">
+      <div class="tote-label">Left to Pay</div>
+      <div class="tote-value ${t.leftToPay>0?'red':''}">${fmt(t.leftToPay)}</div>
+    </div>
+    <div class="tote-card">
+      <div class="tote-label">Gambled</div>
+      <div class="tote-value">${fmt(t.gambled)}</div>
+    </div>
+    <div class="tote-card">
+      <div class="tote-label">Money Won</div>
+      <div class="tote-value win">${fmt(t.won)}</div>
+    </div>
+    <div class="tote-card pot">
+      <div class="tote-label">Current Pot</div>
+      <div class="tote-value">${fmt(t.pot)}</div>
+      <div class="tote-carry">
+        <span>+ ${fmt(startingPot)} carried over</span>
+        <button class="link-btn light" id="editCarry">Edit</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('editCarry').addEventListener('click', ()=>{
+    if(!carryFormOpen && !requireUnlock()) return;
+    carryFormOpen = !carryFormOpen;
+    renderOverview();
+  });
+  const existingCarryForm = document.getElementById('carryForm');
+  if(existingCarryForm) existingCarryForm.remove();
+  if(carryFormOpen){
+    const carryHost = document.createElement('div');
+    carryHost.className = 'form-panel open';
+    carryHost.id = 'carryForm';
+    carryHost.innerHTML = `
+      <label>Starting pot / carry-over (£)</label>
+      <input type="number" id="carryValue" step="0.01" value="${startingPot}">
+      <div class="form-actions">
+        <button class="btn ghost" id="cancelCarry">Cancel</button>
+        <button class="btn primary" id="saveCarry">Save</button>
+      </div>
+    `;
+    grid.insertAdjacentElement('afterend', carryHost);
+    document.getElementById('cancelCarry').addEventListener('click', ()=>{
+      carryFormOpen = false;
+      renderOverview();
+    });
+    document.getElementById('saveCarry').addEventListener('click', async ()=>{
+      if(!requireUnlock()) return;
+      const val = parseFloat(document.getElementById('carryValue').value);
+      startingPot = isNaN(val) ? 0 : val;
+      await saveStartingPot();
+      carryFormOpen = false;
+      renderOverview();
+      showToast('Carry-over updated');
+    });
+  }
+  const loc = document.getElementById('locRow');
+  loc.innerHTML = sources.map(name=>`
+    <div class="loc-card">
+      <div class="loc-name"><span>${escapeHtml(name)}</span><button class="loc-del" data-del-source="${escapeHtml(name)}" title="Remove source">✕</button></div>
+      <input type="number" class="loc-amt-input" data-loc-input="${escapeHtml(name)}" step="0.01" value="${potBalances[name]||0}">
+    </div>
+  `).join('');
+  loc.querySelectorAll('[data-del-source]').forEach(el=>{
+    el.addEventListener('click', async ()=>{
+      if(!requireUnlock()) return;
+      const name = el.getAttribute('data-del-source');
+      sources = sources.filter(s=>s!==name);
+      delete potBalances[name];
+      await saveSources();
+      await savePotBalances();
+      renderOverview();
+      showToast(`${name} removed from sources`);
+    });
+  });
+
+  // Reconciliation check: does the manually-entered Held In total match the calculated pot?
+  const checkHost = document.getElementById('heldInCheck');
+  const heldInTotal = sources.reduce((s,name)=>s+(potBalances[name]||0),0);
+  const diff = Math.round((heldInTotal - t.pot) * 100) / 100;
+  if(sources.length===0){
+    checkHost.innerHTML = '';
+  } else if(Math.abs(diff) < 0.01){
+    checkHost.innerHTML = `<div class="held-in-check ok">✓ Held In (${fmt(heldInTotal)}) matches Current Pot</div>`;
+  } else {
+    const direction = diff > 0 ? 'more than' : 'less than';
+    checkHost.innerHTML = `<div class="held-in-check warn">⚠ Held In (${fmt(heldInTotal)}) is ${fmt(Math.abs(diff))} ${direction} Current Pot (${fmt(t.pot)}) — worth a recount</div>`;
+  }
+}
+
+// ---------- Render: Members ----------
+let openMemberId = null;
+function renderMembers(){
+  const buyInInput = document.getElementById('buyInAmountInput');
+  if(document.activeElement !== buyInInput){
+    buyInInput.value = buyInAmount;
+  }
+  const list = document.getElementById('membersList');
+  if(members.length===0){
+    list.innerHTML = `<div class="empty-state"><div class="display">No members yet</div><p>Add your syndicate members to start tracking payments.</p></div>`;
+    return;
+  }
+  list.innerHTML = members.map(m=>{
+    const paid = memberPaid(m.id);
+    const buyIn = m.buyIn||0;
+    const pct = buyIn>0 ? Math.min(100,(paid/buyIn)*100) : (paid>0?100:0);
+    const short = paid < buyIn;
+    const overpaid = paid - buyIn;
+    const mPayments = payments.filter(p=>p.memberId===m.id).sort((a,b)=>b.date.localeCompare(a.date));
+    return `
+    <div class="ticket">
+      <div class="ticket-notch left"></div><div class="ticket-notch right"></div>
+      <div class="ticket-row" data-member-toggle="${m.id}">
+        <div>
+          <div class="name">${escapeHtml(m.name)}</div>
+          <div class="meta">${fmt(paid)} of ${fmt(buyIn)} paid</div>
+          <div class="progress"><div class="progress-fill ${short?'short':''}" style="width:${pct}%"></div></div>
+          ${overpaid > 0.004 ? `<div class="owed-back">${fmt(overpaid)} owed back</div>` : ''}
+        </div>
+        <div class="right">
+          <div class="amt">${fmt(paid)}</div>
+          <button class="del-btn" data-del-member="${m.id}" title="Remove member">✕</button>
+        </div>
+      </div>
+      <div class="ticket-detail ${openMemberId===m.id?'open':''}" id="detail-${m.id}">
+        ${mPayments.length===0 ? '<div class="empty-note">No payments logged yet.</div>' :
+          mPayments.map(p=>`
+            <div class="pay-item">
+              <span>${p.date}<span class="src">${p.source}</span></span>
+              <span class="amt">${fmt(p.value)} <button class="del-btn" data-del-payment="${p.id}">✕</button></span>
+            </div>
+          `).join('')}
+        <button class="add-btn" style="margin-top:12px;font-size:11px;padding:10px;" data-add-payment="${m.id}">+ Add Payment</button>
+        <div class="form-panel" id="payform-${m.id}">
+          <label>Date</label>
+          <input type="date" id="payDate-${m.id}" value="${todayISO()}">
+          <label>Source</label>
+          <select id="paySource-${m.id}">
+            ${sources.map(s=>`<option>${escapeHtml(s)}</option>`).join('')}
+          </select>
+          <button type="button" class="link-btn" data-toggle-newsource="${m.id}">+ New source</button>
+          <div class="new-source-inline" id="newSourceRow-${m.id}">
+            <input type="text" id="newSourceInput-${m.id}" placeholder="Source name">
+            <button type="button" data-confirm-newsource="${m.id}">Add</button>
+          </div>
+          <label>Value (£)</label>
+          <input type="number" id="payValue-${m.id}" placeholder="20" min="0" step="0.01">
+          <div class="form-actions">
+            <button class="btn ghost" data-cancel-payment="${m.id}">Cancel</button>
+            <button class="btn primary" data-save-payment="${m.id}">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('[data-member-toggle]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const id = el.getAttribute('data-member-toggle');
+      openMemberId = openMemberId===id ? null : id;
+      renderMembers();
+    });
+  });
+  list.querySelectorAll('[data-del-member]').forEach(el=>{
+    el.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      if(!requireUnlock()) return;
+      const id = el.getAttribute('data-del-member');
+      members = members.filter(m=>m.id!==id);
+      payments = payments.filter(p=>p.memberId!==id);
+      await saveMembers(); await savePayments();
+      renderMembers(); renderOverview(); renderBets(); renderLotto();
+      showToast('Member removed');
+    });
+  });
+  list.querySelectorAll('[data-del-payment]').forEach(el=>{
+    el.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      if(!requireUnlock()) return;
+      const id = el.getAttribute('data-del-payment');
+      payments = payments.filter(p=>p.id!==id);
+      await savePayments();
+      renderMembers(); renderOverview();
+      showToast('Payment removed');
+    });
+  });
+  list.querySelectorAll('[data-add-payment]').forEach(el=>{
+    el.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const id = el.getAttribute('data-add-payment');
+      const panel = document.getElementById(`payform-${id}`);
+      if(!panel.classList.contains('open') && !requireUnlock()) return;
+      panel.classList.toggle('open');
+    });
+  });
+  list.querySelectorAll('[data-cancel-payment]').forEach(el=>{
+    el.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const id = el.getAttribute('data-cancel-payment');
+      document.getElementById(`payform-${id}`).classList.remove('open');
+    });
+  });
+  list.querySelectorAll('[data-toggle-newsource]').forEach(el=>{
+    el.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      if(!requireUnlock()) return;
+      const id = el.getAttribute('data-toggle-newsource');
+      document.getElementById(`newSourceRow-${id}`).classList.toggle('open');
+    });
+  });
+  list.querySelectorAll('[data-confirm-newsource]').forEach(el=>{
+    el.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      if(!requireUnlock()) return;
+      const id = el.getAttribute('data-confirm-newsource');
+      const input = document.getElementById(`newSourceInput-${id}`);
+      const name = input.value.trim();
+      if(!name){ showToast('Enter a source name'); return; }
+      if(name === BET_STAKE_SOURCE || sources.some(s=>s.toLowerCase()===name.toLowerCase())){
+        showToast('That source already exists'); return;
+      }
+      sources.push(name);
+      await saveSources();
+      const sel = document.getElementById(`paySource-${id}`);
+      const opt = document.createElement('option');
+      opt.textContent = name;
+      sel.appendChild(opt);
+      sel.value = name;
+      input.value = '';
+      document.getElementById(`newSourceRow-${id}`).classList.remove('open');
+      showToast(`${name} added`);
+    });
+  });
+  list.querySelectorAll('[data-save-payment]').forEach(el=>{
+    el.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      if(!requireUnlock()) return;
+      const id = el.getAttribute('data-save-payment');
+      const date = document.getElementById(`payDate-${id}`).value || todayISO();
+      const source = document.getElementById(`paySource-${id}`).value;
+      const value = parseFloat(document.getElementById(`payValue-${id}`).value);
+      if(!value || value<=0){ showToast('Enter a valid amount'); return; }
+      payments.push({id:uid(), memberId:id, date, source, value});
+      await savePayments();
+      renderMembers(); renderOverview();
+      showToast('Payment added');
+    });
+  });
+}
+
+// ---------- Render: Bets ----------
+let openBetId = null;
+let betScreenshots = {}; // in-memory cache: betId -> dataUrl
+
+function readAndCompressImage(file, maxDim=1000, quality=0.72){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = (e)=>{
+      const img = new Image();
+      img.onload = ()=>{
+        let w = img.width, h = img.height;
+        if(w > h){ if(w > maxDim){ h = Math.round(h * maxDim / w); w = maxDim; } }
+        else { if(h > maxDim){ w = Math.round(w * maxDim / h); h = maxDim; } }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => reject(new Error('Could not read image'));
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject(new Error('Could not read file'));
+    reader.readAsDataURL(file);
+  });
+}
+async function loadBetScreenshot(betId){
+  try{
+    const r = await window.storage.get(`syn:betshot:${betId}`, true);
+    return r ? r.value : null;
+  }catch(e){ return null; }
+}
+async function saveBetScreenshot(betId, dataUrl){
+  try{ await window.storage.set(`syn:betshot:${betId}`, dataUrl, true); return true; }
+  catch(e){ showToast('Could not save — try a smaller image'); return false; }
+}
+async function deleteBetScreenshot(betId){
+  try{ await window.storage.delete(`syn:betshot:${betId}`, true); }catch(e){}
+}
+function renderShotImage(id, dataUrl){
+  const area = document.getElementById(`shotArea-${id}`);
+  if(area) area.innerHTML = `<img src="${dataUrl}" class="bet-shot-img" alt="Bet slip screenshot">`;
+}
+async function loadAndShowScreenshot(id){
+  let dataUrl = betScreenshots[id];
+  if(!dataUrl){
+    dataUrl = await loadBetScreenshot(id);
+    if(dataUrl) betScreenshots[id] = dataUrl;
+  }
+  if(dataUrl) renderShotImage(id, dataUrl);
+}
+
+function renderBets(){
+  const list = document.getElementById('betsList');
+  const memberSel = document.getElementById('betMember');
+  memberSel.innerHTML = '<option value="GROUP">🤝 Group</option>' +
+    members.map(m=>`<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('');
+
+  if(bets.length===0){
+    list.innerHTML = `<div class="empty-state"><div class="display">No bets logged</div><p>Log your first group bet below.</p></div>`;
+    return;
+  }
+  const sorted = [...bets].sort((a,b)=>b.date.localeCompare(a.date));
+  list.innerHTML = sorted.map(b=>{
+    const isGroup = b.placedBy === 'GROUP';
+    const member = isGroup ? null : members.find(m=>m.id===b.placedBy);
+    const whoLabel = isGroup ? '🤝 Group' : (member ? escapeHtml(member.name) : 'Unknown');
+    const profit = b.won - b.stake;
+    return `
+    <div class="ticket">
+      <div class="ticket-notch left"></div><div class="ticket-notch right"></div>
+      <div class="bet-row" data-bet-toggle="${b.id}">
+        <div class="bet-top">
+          <div>
+            <div class="bet-date">${b.date}</div>
+            <div class="bet-who">${whoLabel}</div>
+          </div>
+          <button class="del-btn" data-del-bet="${b.id}" title="Remove bet">✕</button>
+        </div>
+        ${b.comment ? `<div class="bet-comment">${escapeHtml(b.comment)}</div>` : ''}
+        <div class="bet-nums">
+          <div class="bet-num">Stake<b>${fmt(b.stake)}</b></div>
+          <div class="bet-num">Won<b>${fmt(b.won)}</b></div>
+          <div class="bet-num profit">Profit<b class="${profit>=0?'pos':'neg'}">${fmt(profit)}</b></div>
+        </div>
+        ${b.countsAsPayment ? '<div class="bet-counted">✓ Stake counted toward buy-in</div>' : ''}
+        ${b.hasScreenshot ? '<div class="shot-badge">📷 Screenshot attached — tap to view</div>' : '<div class="shot-badge dim">📷 No screenshot — tap to add</div>'}
+      </div>
+      <div class="ticket-detail ${openBetId===b.id?'open':''}" id="betdetail-${b.id}">
+        <div id="shotArea-${b.id}"></div>
+        <input type="file" accept="image/*" id="shotInput-${b.id}" style="display:none;">
+        <button class="add-btn" style="margin-top:12px;font-size:11px;padding:10px;" data-pick-shot="${b.id}">${b.hasScreenshot ? '↻ Replace Screenshot' : '+ Add Screenshot'}</button>
+        ${b.hasScreenshot ? `<button class="add-btn" style="margin-top:8px;font-size:11px;padding:10px;border-color:var(--red);color:var(--red);" data-remove-shot="${b.id}">Remove Screenshot</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('[data-bet-toggle]').forEach(el=>{
+    el.addEventListener('click', async ()=>{
+      const id = el.getAttribute('data-bet-toggle');
+      openBetId = openBetId===id ? null : id;
+      renderBets();
+    });
+  });
+  list.querySelectorAll('[data-del-bet]').forEach(el=>{
+    el.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      if(!requireUnlock()) return;
+      const id = el.getAttribute('data-del-bet');
+      bets = bets.filter(b=>b.id!==id);
+      const hadLinkedPayment = payments.some(p=>p.linkedBetId===id);
+      payments = payments.filter(p=>p.linkedBetId!==id);
+      await deleteBetScreenshot(id);
+      delete betScreenshots[id];
+      await saveBets();
+      if(hadLinkedPayment) await savePayments();
+      if(openBetId===id) openBetId = null;
+      renderBets(); renderOverview(); renderMembers();
+      showToast('Bet removed');
+    });
+  });
+  list.querySelectorAll('[data-pick-shot]').forEach(el=>{
+    el.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      if(!requireUnlock()) return;
+      const id = el.getAttribute('data-pick-shot');
+      document.getElementById(`shotInput-${id}`).click();
+    });
+  });
+  list.querySelectorAll('input[id^="shotInput-"]').forEach(el=>{
+    el.addEventListener('click', (e)=> e.stopPropagation());
+    el.addEventListener('change', async (e)=>{
+      if(!requireUnlock()) return;
+      const id = el.id.replace('shotInput-','');
+      const file = el.files[0];
+      if(!file) return;
+      showToast('Processing image…');
+      try{
+        const dataUrl = await readAndCompressImage(file);
+        const ok = await saveBetScreenshot(id, dataUrl);
+        if(ok){
+          betScreenshots[id] = dataUrl;
+          const bet = bets.find(x=>x.id===id);
+          if(bet){ bet.hasScreenshot = true; await saveBets(); }
+          renderBets();
+          showToast('Screenshot added');
+        }
+      }catch(err){
+        showToast('Could not read that image');
+      }
+    });
+  });
+  list.querySelectorAll('[data-remove-shot]').forEach(el=>{
+    el.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      if(!requireUnlock()) return;
+      const id = el.getAttribute('data-remove-shot');
+      await deleteBetScreenshot(id);
+      delete betScreenshots[id];
+      const bet = bets.find(x=>x.id===id);
+      if(bet){ bet.hasScreenshot = false; await saveBets(); }
+      renderBets();
+      showToast('Screenshot removed');
+    });
+  });
+
+  // Show cached/loaded screenshot for whichever bet is currently open
+  if(openBetId){
+    const bet = bets.find(x=>x.id===openBetId);
+    if(bet && bet.hasScreenshot){
+      if(betScreenshots[openBetId]) renderShotImage(openBetId, betScreenshots[openBetId]);
+      else loadAndShowScreenshot(openBetId);
+    }
+  }
+}
+
+// ---------- Render: Lotto ----------
+let openLottoId = null;
+function dayLabel(dateStr){
+  if(!dateStr) return '';
+  const d = new Date(dateStr + 'T12:00:00');
+  if(isNaN(d)) return '';
+  const names = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  return names[d.getDay()];
+}
+function renderLotto(){
+  const payerSel = document.getElementById('lottoDefaultPayerSelect');
+  const formPayerSel = document.getElementById('lottoPayer');
+  if(members.length===0){
+    payerSel.innerHTML = '';
+    payerSel.disabled = true;
+    formPayerSel.innerHTML = '';
+    formPayerSel.disabled = true;
+  } else {
+    payerSel.disabled = false;
+    formPayerSel.disabled = false;
+    const opts = members.map(m=>`<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('');
+    payerSel.innerHTML = opts;
+    formPayerSel.innerHTML = opts;
+    if(lottoDefaultPayer && members.some(m=>m.id===lottoDefaultPayer)){
+      payerSel.value = lottoDefaultPayer;
+      formPayerSel.value = lottoDefaultPayer;
+    } else {
+      lottoDefaultPayer = members[0].id;
+    }
+  }
+  const firstDateInput = document.getElementById('lottoFirstDateInput');
+  if(document.activeElement !== firstDateInput){
+    firstDateInput.value = lottoFirstDate || '';
+  }
+  const potDateInput = document.getElementById('lottoPotDateInput');
+  if(document.activeElement !== potDateInput){
+    potDateInput.value = lottoPotFundingDate || '';
+  }
+
+  const list = document.getElementById('lottoList');
+  if(lottoEntries.length===0){
+    list.innerHTML = `<div class="empty-state"><div class="display">No entries yet</div><p>Log the Wednesday or Saturday Lotto below.</p></div>`;
+    return;
+  }
+  const sorted = [...lottoEntries].sort((a,b)=>b.date.localeCompare(a.date));
+  list.innerHTML = sorted.map(l=>{
+    const payer = members.find(m=>m.id===l.payerId);
+    return `
+    <div class="ticket">
+      <div class="ticket-notch left"></div><div class="ticket-notch right"></div>
+      <div class="bet-row" data-lotto-toggle="${l.id}">
+        <div class="bet-top">
+          <div>
+            <div class="bet-date">${l.date}</div>
+            <div class="bet-who">${payer ? escapeHtml(payer.name) : 'Unknown'}</div>
+          </div>
+          <button class="del-btn" data-del-lotto="${l.id}" title="Remove entry">✕</button>
+        </div>
+        <div class="bet-nums">
+          <div class="bet-num">Stake<b>${fmt(l.stake)}</b></div>
+          <div class="bet-num">Won<b>${fmt(l.won ? (l.wonAmount||0) : 0)}</b></div>
+        </div>
+        <div class="lotto-tags">
+          <span class="lotto-tag day">${dayLabel(l.date)}</span>
+          <span class="lotto-tag ${l.fromPot ? 'pot' : 'personal'}">${l.fromPot ? 'From Pot' : 'Personal Pay'}</span>
+          ${l.won ? `<span class="lotto-tag won">✓ Won ${fmt(l.wonAmount||0)}</span>` : ''}
+        </div>
+      </div>
+      <div class="lotto-edit ${openLottoId===l.id?'open':''}" id="lottoedit-${l.id}">
+        <div class="checkbox-row">
+          <input type="checkbox" id="lottoFromPotEdit-${l.id}" ${l.fromPot?'checked':''}>
+          <label for="lottoFromPotEdit-${l.id}">Cover from the pot instead of ${payer?escapeHtml(payer.name):'the payer'}'s own money</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="lottoWonEdit-${l.id}" ${l.won?'checked':''}>
+          <label for="lottoWonEdit-${l.id}">This draw won</label>
+        </div>
+        <div id="lottoWonAmountEditRow-${l.id}" style="display:${l.won?'block':'none'};margin-top:10px;">
+          <label>Amount won (£)</label>
+          <input type="number" id="lottoWonAmountEdit-${l.id}" value="${l.wonAmount||255}" min="0" step="0.01">
+        </div>
+        <div class="form-actions">
+          <button class="btn primary" data-save-lotto="${l.id}">Update</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('[data-lotto-toggle]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const id = el.getAttribute('data-lotto-toggle');
+      openLottoId = openLottoId===id ? null : id;
+      renderLotto();
+    });
+  });
+  list.querySelectorAll('[data-del-lotto]').forEach(el=>{
+    el.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      if(!requireUnlock()) return;
+      const id = el.getAttribute('data-del-lotto');
+      lottoEntries = lottoEntries.filter(l=>l.id!==id);
+      const hadLinkedPayment = payments.some(p=>p.linkedLottoId===id);
+      payments = payments.filter(p=>p.linkedLottoId!==id);
+      await saveLotto();
+      if(hadLinkedPayment) await savePayments();
+      if(openLottoId===id) openLottoId = null;
+      renderLotto(); renderOverview(); renderMembers();
+      showToast('Entry removed');
+    });
+  });
+  list.querySelectorAll('[id^="lottoWonEdit-"]').forEach(el=>{
+    el.addEventListener('change', (e)=>{
+      const id = el.id.replace('lottoWonEdit-','');
+      document.getElementById(`lottoWonAmountEditRow-${id}`).style.display = el.checked ? 'block' : 'none';
+    });
+    el.addEventListener('click', (e)=> e.stopPropagation());
+  });
+  list.querySelectorAll('[id^="lottoFromPotEdit-"]').forEach(el=>{
+    el.addEventListener('click', (e)=> e.stopPropagation());
+  });
+  list.querySelectorAll('[data-save-lotto]').forEach(el=>{
+    el.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      if(!requireUnlock()) return;
+      const id = el.getAttribute('data-save-lotto');
+      const entry = lottoEntries.find(l=>l.id===id);
+      if(!entry) return;
+      const wonChecked = document.getElementById(`lottoWonEdit-${id}`).checked;
+      const amount = parseFloat(document.getElementById(`lottoWonAmountEdit-${id}`).value) || 0;
+      const fromPotChecked = document.getElementById(`lottoFromPotEdit-${id}`).checked;
+      entry.won = wonChecked;
+      entry.wonAmount = wonChecked ? amount : 0;
+      let paymentsChanged = false;
+      if(fromPotChecked !== entry.fromPot){
+        if(fromPotChecked){
+          // switching personal -> pot: drop the linked payment
+          if(payments.some(p=>p.linkedLottoId===id)){
+            payments = payments.filter(p=>p.linkedLottoId!==id);
+            paymentsChanged = true;
+          }
+        } else {
+          // switching pot -> personal: recreate the linked payment
+          if(!payments.some(p=>p.linkedLottoId===id)){
+            payments.push({id:uid(), memberId:entry.payerId, date:entry.date, source:BET_STAKE_SOURCE, value:entry.stake, linkedLottoId:id});
+            paymentsChanged = true;
+          }
+        }
+        entry.fromPot = fromPotChecked;
+      }
+      await saveLotto();
+      if(paymentsChanged) await savePayments();
+      openLottoId = null;
+      renderLotto(); renderOverview(); renderMembers();
+      showToast('Updated');
+    });
+  });
+}
+
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ---------- PIN Lock ----------
+function requireUnlock(){
+  if(pin && !unlocked){
+    showToast('Enter the PIN to edit');
+    openPinModal('unlock');
+    return false;
+  }
+  return true;
+}
+function renderLockBar(){
+  const bar = document.getElementById('lockBar');
+  if(!pin){
+    bar.innerHTML = `<span>🔓 No PIN set — anyone can edit</span><button class="link-btn light" id="lockActionBtn">Set PIN</button>`;
+  } else if(!unlocked){
+    bar.innerHTML = `<span>🔒 Editing locked</span><button class="link-btn light" id="lockActionBtn">Unlock</button>`;
+  } else {
+    bar.innerHTML = `<span>🔓 Unlocked for this session</span><span style="display:flex;gap:12px;"><button class="link-btn light" id="changePinBtn">Change PIN</button><button class="link-btn light" id="lockActionBtn">Lock</button></span>`;
+  }
+  document.getElementById('lockActionBtn').addEventListener('click', ()=>{
+    if(!pin) openPinModal('setup');
+    else if(!unlocked) openPinModal('unlock');
+    else { unlocked = false; renderLockBar(); showToast('Locked'); }
+  });
+  const changeBtn = document.getElementById('changePinBtn');
+  if(changeBtn) changeBtn.addEventListener('click', ()=> openPinModal('change'));
+}
+function openPinModal(mode){
+  pinModalMode = mode;
+  const title = document.getElementById('pinModalTitle');
+  const input = document.getElementById('pinInput');
+  const hint = document.getElementById('pinExtraHint');
+  const confirmBtn = document.getElementById('pinConfirmBtn');
+  input.value = '';
+  if(mode==='setup'){
+    title.textContent = 'Set an edit PIN';
+    input.placeholder = 'Choose a PIN';
+    confirmBtn.textContent = 'Set PIN';
+    hint.textContent = 'Anyone with this PIN can add or delete entries. Share it only with people you trust to edit.';
+  } else if(mode==='change'){
+    title.textContent = 'Change edit PIN';
+    input.placeholder = 'New PIN';
+    confirmBtn.textContent = 'Save';
+    hint.textContent = 'This replaces the current PIN for everyone.';
+  } else {
+    title.textContent = 'Enter PIN to edit';
+    input.placeholder = 'PIN';
+    confirmBtn.textContent = 'Unlock';
+    hint.textContent = '';
+  }
+  document.getElementById('pinOverlay').classList.add('open');
+  setTimeout(()=>input.focus(), 60);
+}
+function closePinModal(){
+  document.getElementById('pinOverlay').classList.remove('open');
+}
+document.getElementById('pinCancelBtn').addEventListener('click', closePinModal);
+document.getElementById('pinOverlay').addEventListener('click', (e)=>{
+  if(e.target.id === 'pinOverlay') closePinModal();
+});
+document.getElementById('pinConfirmBtn').addEventListener('click', async ()=>{
+  const val = document.getElementById('pinInput').value.trim();
+  if(pinModalMode==='setup'){
+    if(!val){ showToast('Enter a PIN'); return; }
+    pin = val; await savePin(); unlocked = true;
+    closePinModal(); renderLockBar();
+    showToast('PIN set — editing unlocked for you');
+  } else if(pinModalMode==='change'){
+    if(!val){ showToast('Enter a PIN'); return; }
+    pin = val; await savePin();
+    closePinModal(); renderLockBar();
+    showToast('PIN updated');
+  } else {
+    if(val && val === pin){
+      unlocked = true;
+      closePinModal(); renderLockBar();
+      showToast('Unlocked for this session');
+    } else {
+      showToast('Wrong PIN');
+    }
+  }
+});
+document.getElementById('pinInput').addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter') document.getElementById('pinConfirmBtn').click();
+});
+
+// ---------- Tab nav ----------
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.view).classList.add('active');
+  });
+});
+
+// ---------- Add Member form ----------
+document.getElementById('showAddMember').addEventListener('click', ()=>{
+  if(!requireUnlock()) return;
+  document.getElementById('addMemberForm').classList.add('open');
+});
+document.getElementById('cancelAddMember').addEventListener('click', ()=>{
+  document.getElementById('addMemberForm').classList.remove('open');
+  document.getElementById('memberName').value='';
+});
+document.getElementById('saveAddMember').addEventListener('click', async ()=>{
+  if(!requireUnlock()) return;
+  const name = document.getElementById('memberName').value.trim();
+  if(!name){ showToast('Enter a name'); return; }
+  members.push({id:uid(), name, buyIn:buyInAmount});
+  await saveMembers();
+  document.getElementById('memberName').value='';
+  document.getElementById('addMemberForm').classList.remove('open');
+  renderMembers(); renderOverview(); renderBets(); renderLotto();
+  showToast('Member added');
+});
+document.getElementById('saveBuyInAmount').addEventListener('click', async ()=>{
+  if(!requireUnlock()) return;
+  const val = parseFloat(document.getElementById('buyInAmountInput').value);
+  if(isNaN(val) || val<0){ showToast('Enter a valid amount'); return; }
+  buyInAmount = val;
+  await saveBuyInAmount();
+  members.forEach(m => m.buyIn = buyInAmount);
+  await saveMembers();
+  renderMembers(); renderOverview();
+  showToast(`Buy-in set to ${fmt(buyInAmount)} for everyone`);
+});
+
+// ---------- Add Bet form ----------
+document.getElementById('showAddBet').addEventListener('click', ()=>{
+  if(!requireUnlock()) return;
+  if(members.length===0){ showToast('Add a member first'); return; }
+  document.getElementById('betDate').value = todayISO();
+  document.getElementById('betMember').value = 'GROUP';
+  document.getElementById('betComment').value = '';
+  document.getElementById('betCountsPaymentRow').style.display = 'none';
+  document.getElementById('betCountsPayment').checked = false;
+  document.getElementById('addBetForm').classList.add('open');
+});
+document.getElementById('betMember').addEventListener('change', (e)=>{
+  const isGroup = e.target.value === 'GROUP';
+  document.getElementById('betCountsPaymentRow').style.display = isGroup ? 'none' : 'flex';
+  if(isGroup) document.getElementById('betCountsPayment').checked = false;
+});
+document.getElementById('cancelAddBet').addEventListener('click', ()=>{
+  document.getElementById('addBetForm').classList.remove('open');
+});
+document.getElementById('saveAddBet').addEventListener('click', async ()=>{
+  if(!requireUnlock()) return;
+  const date = document.getElementById('betDate').value || todayISO();
+  const placedBy = document.getElementById('betMember').value;
+  const comment = document.getElementById('betComment').value.trim();
+  const stake = parseFloat(document.getElementById('betStake').value);
+  const won = parseFloat(document.getElementById('betWon').value) || 0;
+  const isGroup = placedBy === 'GROUP';
+  const countsAsPayment = isGroup ? false : document.getElementById('betCountsPayment').checked;
+  if(!placedBy){ showToast('Select who placed the bet'); return; }
+  if(!stake || stake<=0){ showToast('Enter a valid stake'); return; }
+  const betId = uid();
+  bets.push({id:betId, date, placedBy, comment, stake, won, countsAsPayment, hasScreenshot:false});
+  await saveBets();
+  if(countsAsPayment){
+    payments.push({id:uid(), memberId:placedBy, date, source:BET_STAKE_SOURCE, value:stake, linkedBetId:betId});
+    await savePayments();
+  }
+  document.getElementById('betStake').value='';
+  document.getElementById('betWon').value='';
+  document.getElementById('betComment').value='';
+  document.getElementById('betCountsPayment').checked=false;
+  document.getElementById('addBetForm').classList.remove('open');
+  renderBets(); renderOverview(); renderMembers();
+  showToast(countsAsPayment ? 'Bet logged & counted toward buy-in' : 'Bet logged');
+});
+
+// ---------- Add Source form ----------
+document.getElementById('showAddSource').addEventListener('click', ()=>{
+  if(!requireUnlock()) return;
+  document.getElementById('addSourceForm').classList.add('open');
+});
+document.getElementById('cancelAddSource').addEventListener('click', ()=>{
+  document.getElementById('addSourceForm').classList.remove('open');
+  document.getElementById('sourceName').value='';
+});
+document.getElementById('saveAddSource').addEventListener('click', async ()=>{
+  if(!requireUnlock()) return;
+  const name = document.getElementById('sourceName').value.trim();
+  if(!name){ showToast('Enter a source name'); return; }
+  if(name === BET_STAKE_SOURCE || sources.some(s=>s.toLowerCase()===name.toLowerCase())){
+    showToast('That source already exists'); return;
+  }
+  sources.push(name);
+  await saveSources();
+  document.getElementById('sourceName').value='';
+  document.getElementById('addSourceForm').classList.remove('open');
+  renderOverview();
+  showToast(`${name} added`);
+});
+document.getElementById('saveHeldIn').addEventListener('click', async ()=>{
+  if(!requireUnlock()) return;
+  document.querySelectorAll('[data-loc-input]').forEach(el=>{
+    const name = el.getAttribute('data-loc-input');
+    const val = parseFloat(el.value);
+    potBalances[name] = isNaN(val) ? 0 : val;
+  });
+  await savePotBalances();
+  renderOverview();
+  showToast('Held In balances saved');
+});
+
+// ---------- Lotto tab ----------
+document.getElementById('lottoDefaultPayerSelect').addEventListener('change', async (e)=>{
+  if(!requireUnlock()) { renderLotto(); return; }
+  lottoDefaultPayer = e.target.value;
+  await saveLottoDefaultPayer();
+  showToast('Payer updated');
+});
+document.getElementById('saveLottoFirstDate').addEventListener('click', async ()=>{
+  if(!requireUnlock()) return;
+  const val = document.getElementById('lottoFirstDateInput').value;
+  if(!val){ showToast('Pick a date'); return; }
+  if(members.length===0){ showToast('Add a member first'); return; }
+  if(!lottoDefaultPayer){ showToast('Choose who pays first'); return; }
+  lottoFirstDate = val;
+  await saveLottoFirstDate();
+  showToast('Filling in entries…');
+  const created = await generateLottoEntriesFrom(lottoFirstDate);
+  renderLotto(); renderOverview(); renderMembers();
+  showToast(created>0 ? `Added ${created} entr${created===1?'y':'ies'} since ${lottoFirstDate}` : 'All caught up — nothing new to add');
+});
+document.getElementById('saveLottoPotDate').addEventListener('click', async ()=>{
+  if(!requireUnlock()) return;
+  const val = document.getElementById('lottoPotDateInput').value;
+  lottoPotFundingDate = val || null;
+  await saveLottoPotFundingDate();
+  showToast('Updating entries…');
+  const changed = await applyPotFundingRule();
+  renderLotto(); renderOverview(); renderMembers();
+  showToast(lottoPotFundingDate
+    ? (changed>0 ? `${changed} entr${changed===1?'y':'ies'} switched to pot funding` : 'Already up to date')
+    : 'Pot funding switch cleared — entries default to personal pay');
+});
+document.getElementById('showAddLotto').addEventListener('click', ()=>{
+  if(!requireUnlock()) return;
+  if(members.length===0){ showToast('Add a member first'); return; }
+  const d = todayISO();
+  document.getElementById('lottoDate').value = d;
+  document.getElementById('lottoDayHint').textContent = `${dayLabel(d)} — the Irish Lotto usually runs Wed & Sat`;
+  document.getElementById('lottoStake').value = 5;
+  document.getElementById('lottoFromPot').checked = !!(lottoPotFundingDate && d >= lottoPotFundingDate);
+  document.getElementById('lottoWonAtCreate').checked = false;
+  document.getElementById('lottoWonAmountRow').style.display = 'none';
+  document.getElementById('lottoWonAmount').value = 255;
+  if(lottoDefaultPayer) document.getElementById('lottoPayer').value = lottoDefaultPayer;
+  document.getElementById('addLottoForm').classList.add('open');
+});
+document.getElementById('lottoDate').addEventListener('change', (e)=>{
+  document.getElementById('lottoDayHint').textContent = `${dayLabel(e.target.value)} — the Irish Lotto usually runs Wed & Sat`;
+  document.getElementById('lottoFromPot').checked = !!(lottoPotFundingDate && e.target.value >= lottoPotFundingDate);
+});
+document.getElementById('lottoWonAtCreate').addEventListener('change', (e)=>{
+  document.getElementById('lottoWonAmountRow').style.display = e.target.checked ? 'block' : 'none';
+});
+document.getElementById('cancelAddLotto').addEventListener('click', ()=>{
+  document.getElementById('addLottoForm').classList.remove('open');
+});
+document.getElementById('saveAddLotto').addEventListener('click', async ()=>{
+  if(!requireUnlock()) return;
+  const date = document.getElementById('lottoDate').value || todayISO();
+  const stake = parseFloat(document.getElementById('lottoStake').value);
+  const payerId = document.getElementById('lottoPayer').value;
+  const fromPot = document.getElementById('lottoFromPot').checked;
+  const won = document.getElementById('lottoWonAtCreate').checked;
+  const wonAmount = won ? (parseFloat(document.getElementById('lottoWonAmount').value) || 0) : 0;
+  if(!payerId){ showToast('Select who paid'); return; }
+  if(!stake || stake<=0){ showToast('Enter a valid stake'); return; }
+  const lottoId = uid();
+  lottoEntries.push({id:lottoId, date, stake, payerId, fromPot, won, wonAmount});
+  await saveLotto();
+  if(!fromPot){
+    payments.push({id:uid(), memberId:payerId, date, source:BET_STAKE_SOURCE, value:stake, linkedLottoId:lottoId});
+    await savePayments();
+  }
+  document.getElementById('addLottoForm').classList.remove('open');
+  renderLotto(); renderOverview(); renderMembers();
+  showToast('Lotto entry logged');
+});
+
+// ---------- Auto-generate Lotto entries ----------
+function isWedOrSat(d){ const day = d.getDay(); return day===3 || day===6; }
+
+// Fills every missing Wed/Sat entry between fromDateStr and today (inclusive), idempotent.
+// Returns number of entries created.
+async function generateLottoEntriesFrom(fromDateStr){
+  if(!fromDateStr) return 0;
+  if(members.length===0) return 0;
+  if(!lottoDefaultPayer || !members.some(m=>m.id===lottoDefaultPayer)) return 0;
+
+  const today = new Date(); today.setHours(12,0,0,0);
+  let cursor = new Date(fromDateStr + 'T12:00:00');
+  if(isNaN(cursor)) return 0;
+
+  let created = 0;
+  let iterations = 0;
+  while(cursor <= today && iterations < 3000){
+    iterations++;
+    if(isWedOrSat(cursor)){
+      const dateStr = cursor.toISOString().slice(0,10);
+      if(!lottoEntries.some(l=>l.date===dateStr)){
+        const lottoId = uid();
+        const fromPot = !!(lottoPotFundingDate && dateStr >= lottoPotFundingDate);
+        lottoEntries.push({id:lottoId, date:dateStr, stake:5, payerId:lottoDefaultPayer, fromPot, won:false, wonAmount:0});
+        if(!fromPot){
+          payments.push({id:uid(), memberId:lottoDefaultPayer, date:dateStr, source:BET_STAKE_SOURCE, value:5, linkedLottoId:lottoId});
+        }
+        created++;
+      }
+    }
+    cursor.setDate(cursor.getDate()+1);
+  }
+
+  try{ await window.storage.set('syn:lottoLastAutoDate', today.toISOString().slice(0,10), true); }catch(e){}
+  if(created>0){
+    await saveLotto();
+    await savePayments();
+  }
+  return created;
+}
+
+// Applies the pot-funding switch date to every existing entry: entries on/after the date
+// are converted to pot-funded (linked payment removed); entries before it are personal
+// (linked payment restored if missing). Returns number of entries changed.
+async function applyPotFundingRule(){
+  let changed = 0;
+  let paymentsChanged = false;
+  lottoEntries.forEach(entry=>{
+    const shouldBeFromPot = !!(lottoPotFundingDate && entry.date >= lottoPotFundingDate);
+    if(shouldBeFromPot !== entry.fromPot){
+      if(shouldBeFromPot){
+        if(payments.some(p=>p.linkedLottoId===entry.id)){
+          payments = payments.filter(p=>p.linkedLottoId!==entry.id);
+          paymentsChanged = true;
+        }
+      } else {
+        if(!payments.some(p=>p.linkedLottoId===entry.id)){
+          payments.push({id:uid(), memberId:entry.payerId, date:entry.date, source:BET_STAKE_SOURCE, value:entry.stake, linkedLottoId:entry.id});
+          paymentsChanged = true;
+        }
+      }
+      entry.fromPot = shouldBeFromPot;
+      changed++;
+    }
+  });
+  if(changed>0) await saveLotto();
+  if(paymentsChanged) await savePayments();
+  return changed;
+}
+
+// Runs on every page load: continues filling forward from wherever it last left off.
+async function autoGenerateLottoEntries(){
+  if(!lottoFirstDate) return; // nothing to anchor from until a First Bet Date is set
+  let last = null;
+  try{
+    const r = await window.storage.get('syn:lottoLastAutoDate', true);
+    last = r ? r.value : null;
+  }catch(e){ last = null; }
+  let startFrom = lottoFirstDate;
+  if(last){
+    const d = new Date(last + 'T12:00:00');
+    d.setDate(d.getDate()+1);
+    startFrom = d.toISOString().slice(0,10);
+  }
+  const created = await generateLottoEntriesFrom(startFrom);
+  if(created>0){
+    showToast(created===1 ? "Added today's Lotto entry automatically" : `Added ${created} automatic Lotto entries`);
+  }
+}
+
+// ---------- Init ----------
+async function init(){
+  await loadAll();
+  await autoGenerateLottoEntries();
+  renderLockBar();
+  renderOverview();
+  renderMembers();
+  renderBets();
+  renderLotto();
+}
+init();
+</script>
+</body>
+</html>
