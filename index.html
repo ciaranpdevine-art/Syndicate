@@ -189,6 +189,24 @@
   .bet-date{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);}
   .bet-who{font-weight:700;font-size:14px;margin-top:2px;}
   .bet-comment{font-size:12px;color:var(--ink-soft);font-style:italic;margin-top:6px;}
+  .betters-box{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px;}
+  .better-chip{display:flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid var(--line);border-radius:20px;background:#fff;font-size:13px;color:var(--ink);cursor:pointer;}
+  .better-chip input{width:auto;margin:0;padding:0;border:none;accent-color:var(--felt);}
+  .sel-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px;}
+  .sel-row:last-of-type{border-bottom:none;}
+  .sel-row select{width:auto;min-width:130px;padding:7px 28px 7px 9px;font-size:13px;}
+  .sel-stamp{display:block;font-size:10px;color:var(--ink-soft);margin-top:1px;}
+  .sel-title{font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-soft);margin:14px 0 4px;}
+  .league-table{background:var(--paper);color:var(--ink);border-radius:10px;overflow:hidden;}
+  .league-head,.league-row{display:grid;grid-template-columns:28px 1fr 46px 46px 46px;align-items:center;gap:4px;padding:10px 14px;}
+  .league-head{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ink-soft);background:var(--paper-dim);}
+  .league-row{border-top:1px solid var(--line);font-size:14px;}
+  .league-row .pos{font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--ink-soft);}
+  .league-row.first .pos{color:var(--gold-dim);}
+  .league-row .nm{font-weight:700;}
+  .league-row .num,.league-head .num{text-align:center;font-family:'IBM Plex Mono',monospace;}
+  .league-row .num.w{font-weight:700;color:var(--green-win);}
+  .league-row .num.l{color:var(--red);}
   .bet-nums{display:flex;gap:16px;margin-top:8px;}
   .bet-num{font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:0.06em;}
   .bet-num b{display:block;font-family:'IBM Plex Mono',monospace;color:var(--ink);font-size:14px;font-weight:700;margin-top:1px;}
@@ -254,6 +272,7 @@
     <button class="tab-btn" data-view="members">Members</button>
     <button class="tab-btn" data-view="bets">Bets</button>
     <button class="tab-btn" data-view="lotto">Lotto</button>
+    <button class="tab-btn" data-view="league">League</button>
   </nav>
   <div class="lock-bar" id="lockBar"></div>
 </header>
@@ -323,6 +342,8 @@
       </select>
       <label>Comment (optional)</label>
       <input type="text" id="betComment" placeholder="e.g. World Cup Final bet" autocomplete="off">
+      <label>Betters on this bet (one selection each, for the League)</label>
+      <div id="betBettersBox" class="betters-box"></div>
       <label>Stake (£)</label>
       <input type="number" id="betStake" placeholder="20" min="0" step="0.01" autocomplete="off">
       <label>Result</label>
@@ -346,6 +367,12 @@
     </div>
     <div class="section-title" style="margin-top:22px;">Bets</div>
     <div id="betsList"></div>
+  </section>
+
+  <!-- LEAGUE -->
+  <section id="league" class="view">
+    <div class="modal-hint" style="margin-bottom:10px;">A winner is a correct selection, a loser is an incorrect one. Ranked by winners; if level, fewest played comes first. Voids and in-play selections aren't counted.</div>
+    <div id="leagueTable"></div>
   </section>
 
   <!-- LOTTO -->
@@ -837,8 +864,9 @@ function renderMembers(){
       const id = el.getAttribute('data-del-member');
       members = members.filter(m=>m.id!==id);
       payments = payments.filter(p=>p.memberId!==id);
-      await saveMembers(); await savePayments();
-      renderMembers(); renderOverview(); renderBets(); renderLotto();
+      bets.forEach(b=>{ if(b.selections) b.selections = b.selections.filter(x=>x.memberId!==id); });
+      await saveMembers(); await savePayments(); await saveBets();
+      renderMembers(); renderOverview(); renderBets(); renderLotto(); renderLeague();
       showToast('Member removed');
     });
   });
@@ -974,6 +1002,13 @@ function renderBets(){
   memberSel.innerHTML = '<option value="GROUP">🤝 Group</option>' +
     members.map(m=>`<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('');
 
+  // Betters picker on the Log a Bet form (keeps any ticks already made)
+  const bettersBox = document.getElementById('betBettersBox');
+  const alreadyTicked = new Set([...bettersBox.querySelectorAll('input:checked')].map(i=>i.value));
+  bettersBox.innerHTML = members.map(m=>`
+    <label class="better-chip"><input type="checkbox" value="${m.id}" ${alreadyTicked.has(m.id)?'checked':''}>${escapeHtml(m.name)}</label>
+  `).join('');
+
   if(bets.length===0){
     list.innerHTML = `<div class="empty-state"><div class="display">No bets logged</div><p>Log your first group bet below.</p></div>`;
     return;
@@ -1008,6 +1043,7 @@ function renderBets(){
         <div class="lotto-tags">
           ${statusTag}
           ${b.countsAsPayment ? '<span class="lotto-tag personal">✓ Counts as payment</span>' : ''}
+          ${(b.selections&&b.selections.length) ? `<span class="lotto-tag day">${b.selections.length} selection${b.selections.length===1?'':'s'}</span>` : ''}
         </div>
         ${b.hasScreenshot ? '<div class="shot-badge">📷 Screenshot attached — tap to view</div>' : '<div class="shot-badge dim">📷 No screenshot — tap to add</div>'}
       </div>
@@ -1026,6 +1062,23 @@ function renderBets(){
         </div>
         <div class="form-actions">
           <button class="btn primary" data-save-bet-status="${b.id}">Update Result</button>
+        </div>
+        <div class="sel-title">League selections</div>
+        ${members.map(m=>{
+          const sel = (b.selections||[]).find(x=>x.memberId===m.id);
+          const r = sel ? sel.result : '';
+          const stamp = sel && sel.updatedAt && r!=='pending' ? `<span class="sel-stamp">set ${new Date(sel.updatedAt).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>` : '';
+          return `<div class="sel-row"><span>${escapeHtml(m.name)}${stamp}</span>
+            <select data-sel-member="${m.id}" data-sel-bet="${b.id}">
+              <option value="" ${r===''?'selected':''}>Not on bet</option>
+              <option value="pending" ${r==='pending'?'selected':''}>⏳ Pending</option>
+              <option value="won" ${r==='won'?'selected':''}>✓ Winner</option>
+              <option value="lost" ${r==='lost'?'selected':''}>✕ Loser</option>
+              <option value="void" ${r==='void'?'selected':''}>Void</option>
+            </select></div>`;
+        }).join('')}
+        <div class="form-actions">
+          <button class="btn primary" data-save-selections="${b.id}">Save Selections</button>
         </div>
         <div id="shotArea-${b.id}"></div>
         <input type="file" accept="image/*" id="shotInput-${b.id}" style="display:none;" autocomplete="off">
@@ -1057,6 +1110,31 @@ function renderBets(){
       if(openBetId===id) openBetId = null;
       renderBets(); renderOverview(); renderMembers();
       showToast('Bet removed');
+    });
+  });
+  list.querySelectorAll('[data-sel-member]').forEach(el=>{
+    el.addEventListener('click', (e)=> e.stopPropagation());
+  });
+  list.querySelectorAll('[data-save-selections]').forEach(el=>{
+    el.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      if(!requireUnlock()) return;
+      const id = el.getAttribute('data-save-selections');
+      const bet = bets.find(x=>x.id===id);
+      if(!bet) return;
+      const old = bet.selections || [];
+      const next = [];
+      list.querySelectorAll(`[data-sel-bet="${id}"]`).forEach(sel=>{
+        const memberId = sel.getAttribute('data-sel-member');
+        const result = sel.value;
+        if(!result) return;
+        const prev = old.find(o=>o.memberId===memberId);
+        next.push({memberId, result, updatedAt: (prev && prev.result===result && prev.updatedAt) ? prev.updatedAt : new Date().toISOString()});
+      });
+      bet.selections = next;
+      await saveBets();
+      renderBets(); renderLeague();
+      showToast('Selections saved');
     });
   });
   list.querySelectorAll('[id^="betStatusEdit-"]').forEach(el=>{
@@ -1138,6 +1216,43 @@ function renderBets(){
       else loadAndShowScreenshot(openBetId);
     }
   }
+}
+
+// ---------- Render: League ----------
+function leagueStats(){
+  const stats = members.map(m=>({id:m.id, name:m.name, won:0, lost:0}));
+  bets.forEach(b=>{
+    (b.selections||[]).forEach(sel=>{
+      const row = stats.find(r=>r.id===sel.memberId);
+      if(!row) return;
+      if(sel.result==='won') row.won++;
+      else if(sel.result==='lost') row.lost++;
+    });
+  });
+  stats.forEach(r=>{ r.played = r.won + r.lost; });
+  stats.sort((a,b)=> b.won-a.won || a.played-b.played || a.name.localeCompare(b.name));
+  return stats;
+}
+function renderLeague(){
+  const host = document.getElementById('leagueTable');
+  if(members.length===0){
+    host.innerHTML = `<div class="empty-state"><div class="display">No members yet</div></div>`;
+    return;
+  }
+  const stats = leagueStats();
+  host.innerHTML = `
+    <div class="league-table">
+      <div class="league-head"><span>#</span><span>Member</span><span class="num">P</span><span class="num">W</span><span class="num">L</span></div>
+      ${stats.map((r,i)=>`
+        <div class="league-row ${i===0 && r.won>0 ? 'first' : ''}">
+          <span class="pos">${i+1}</span>
+          <span class="nm">${escapeHtml(r.name)}</span>
+          <span class="num">${r.played}</span>
+          <span class="num w">${r.won}</span>
+          <span class="num l">${r.lost}</span>
+        </div>`).join('')}
+    </div>
+    <div class="modal-hint" style="margin-top:8px;">P = played, W = winners, L = losers</div>`;
 }
 
 // ---------- Render: Lotto ----------
@@ -1414,7 +1529,7 @@ document.getElementById('saveAddMember').addEventListener('click', async ()=>{
   await saveMembers();
   document.getElementById('memberName').value='';
   document.getElementById('addMemberForm').classList.remove('open');
-  renderMembers(); renderOverview(); renderBets(); renderLotto();
+  renderMembers(); renderOverview(); renderBets(); renderLotto(); renderLeague();
   showToast('Member added');
 });
 document.getElementById('saveBuyInAmount').addEventListener('click', async ()=>{
@@ -1437,6 +1552,7 @@ document.getElementById('showAddBet').addEventListener('click', ()=>{
   document.getElementById('betMember').value = 'GROUP';
   document.getElementById('betComment').value = '';
   document.getElementById('betStatus').value = 'pending';
+  document.querySelectorAll('#betBettersBox input').forEach(i=>i.checked=false);
   document.getElementById('betWonAmountRow').style.display = 'none';
   document.getElementById('betWon').value = '';
   document.getElementById('betCountsPaymentRow').style.display = 'none';
@@ -1467,7 +1583,10 @@ document.getElementById('saveAddBet').addEventListener('click', async ()=>{
   if(!placedBy){ showToast('Select who placed the bet'); return; }
   if(!stake || stake<=0){ showToast('Enter a valid stake'); return; }
   const betId = uid();
-  bets.push({id:betId, date, placedBy, comment, stake, won, status, countsAsPayment, hasScreenshot:false});
+  const nowIso = new Date().toISOString();
+  const selections = [...document.querySelectorAll('#betBettersBox input:checked')]
+    .map(i=>({memberId:i.value, result:'pending', updatedAt:nowIso}));
+  bets.push({id:betId, date, placedBy, comment, stake, won, status, countsAsPayment, selections, hasScreenshot:false});
   await saveBets();
   if(countsAsPayment){
     payments.push({id:uid(), memberId:placedBy, date, source:BET_STAKE_SOURCE, value:stake, linkedBetId:betId});
@@ -1480,7 +1599,8 @@ document.getElementById('saveAddBet').addEventListener('click', async ()=>{
   document.getElementById('betWonAmountRow').style.display='none';
   document.getElementById('betCountsPayment').checked=false;
   document.getElementById('addBetForm').classList.remove('open');
-  renderBets(); renderOverview(); renderMembers();
+  document.querySelectorAll('#betBettersBox input').forEach(i=>i.checked=false);
+  renderBets(); renderOverview(); renderMembers(); renderLeague();
   showToast(countsAsPayment ? 'Bet logged & counted toward buy-in' : 'Bet logged');
 });
 
@@ -1713,7 +1833,7 @@ document.getElementById('clearAllConfirmBtn').addEventListener('click', async ()
   openBetId = null;
   openMemberId = null;
   openLottoId = null;
-  renderOverview(); renderMembers(); renderBets(); renderLotto();
+  renderOverview(); renderMembers(); renderBets(); renderLotto(); renderLeague();
   showToast('Fresh start — payments, bets & Lotto cleared');
 });
 
@@ -1726,6 +1846,7 @@ async function init(){
   renderMembers();
   renderBets();
   renderLotto();
+  renderLeague();
 }
 init();
 </script>
