@@ -189,7 +189,7 @@
   .bet-date{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);}
   .bet-who{font-weight:700;font-size:14px;margin-top:2px;}
   .bet-comment{font-size:12px;color:var(--ink-soft);font-style:italic;margin-top:6px;}
-  .betters-box{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px;}
+  .betters-box{display:flex;flex-direction:column;gap:6px;margin-bottom:4px;}
   .better-chip{display:flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid var(--line);border-radius:20px;background:#fff;font-size:13px;color:var(--ink);cursor:pointer;}
   .better-chip input{width:auto;margin:0;padding:0;border:none;accent-color:var(--felt);}
   .sel-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px;}
@@ -198,7 +198,7 @@
   .sel-stamp{display:block;font-size:10px;color:var(--ink-soft);margin-top:1px;}
   .sel-title{font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-soft);margin:14px 0 4px;}
   .league-table{background:var(--paper);color:var(--ink);border-radius:10px;overflow:hidden;}
-  .league-head,.league-row{display:grid;grid-template-columns:28px 1fr 46px 46px 46px;align-items:center;gap:4px;padding:10px 14px;}
+  .league-head,.league-row{display:grid;grid-template-columns:24px 1fr 32px 32px 32px 64px;align-items:center;gap:4px;padding:10px 14px;}
   .league-head{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ink-soft);background:var(--paper-dim);}
   .league-row{border-top:1px solid var(--line);font-size:14px;}
   .league-row .pos{font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--ink-soft);}
@@ -207,6 +207,15 @@
   .league-row .num,.league-head .num{text-align:center;font-family:'IBM Plex Mono',monospace;}
   .league-row .num.w{font-weight:700;color:var(--green-win);}
   .league-row .num.l{color:var(--red);}
+  .league-row .num.u{font-weight:700;}
+  .league-row .num.u.pos{color:var(--green-win);}
+  .league-row .num.u.neg{color:var(--red);}
+  .better-row{display:flex;align-items:center;gap:8px;}
+  .better-row .better-chip{min-width:118px;}
+  .better-row input.better-odds{flex:1;max-width:150px;width:auto;padding:8px 10px;font-size:13px;}
+  .sel-row .sel-name{flex:1;min-width:0;}
+  .sel-row input.sel-odds{width:74px;flex:none;padding:7px 8px;font-size:13px;}
+  .sel-row select{min-width:104px;}
   .bet-nums{display:flex;gap:16px;margin-top:8px;}
   .bet-num{font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:0.06em;}
   .bet-num b{display:block;font-family:'IBM Plex Mono',monospace;color:var(--ink);font-size:14px;font-weight:700;margin-top:1px;}
@@ -371,7 +380,7 @@
 
   <!-- LEAGUE -->
   <section id="league" class="view">
-    <div class="modal-hint" style="margin-bottom:10px;">A winner is a correct selection, a loser is an incorrect one. Ranked by winners; if level, fewest played comes first. Voids and in-play selections aren't counted.</div>
+    <div class="modal-hint" style="margin-bottom:10px;">Every selection is a 1-unit stake. A winner gains its odds profit (8/13 = +0.62), a loser costs 1. Ranked by units; if level, fewest played comes first. Voids and in-play selections aren't counted.</div>
     <div id="leagueTable"></div>
   </section>
 
@@ -1004,10 +1013,16 @@ function renderBets(){
 
   // Betters picker on the Log a Bet form (keeps any ticks already made)
   const bettersBox = document.getElementById('betBettersBox');
-  const alreadyTicked = new Set([...bettersBox.querySelectorAll('input:checked')].map(i=>i.value));
-  bettersBox.innerHTML = members.map(m=>`
-    <label class="better-chip"><input type="checkbox" value="${m.id}" ${alreadyTicked.has(m.id)?'checked':''}>${escapeHtml(m.name)}</label>
-  `).join('');
+  const alreadyTicked = new Set([...bettersBox.querySelectorAll('input[type=checkbox]:checked')].map(i=>i.value));
+  const alreadyOdds = {};
+  bettersBox.querySelectorAll('[data-better-odds]').forEach(i=>{ alreadyOdds[i.getAttribute('data-better-odds')] = i.value; });
+  bettersBox.innerHTML = members.map(m=>{
+    const on = alreadyTicked.has(m.id);
+    return `<div class="better-row">
+      <label class="better-chip"><input type="checkbox" value="${m.id}" ${on?'checked':''}>${escapeHtml(m.name)}</label>
+      <input type="text" class="better-odds" data-better-odds="${m.id}" placeholder="odds e.g. 8/13" value="${escapeHtml(alreadyOdds[m.id]||'')}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" style="display:${on?'block':'none'};">
+    </div>`;
+  }).join('');
 
   if(bets.length===0){
     list.innerHTML = `<div class="empty-state"><div class="display">No bets logged</div><p>Log your first group bet below.</p></div>`;
@@ -1064,19 +1079,32 @@ function renderBets(){
           <button class="btn primary" data-save-bet-status="${b.id}">Update Result</button>
         </div>
         <div class="sel-title">League selections</div>
-        ${members.map(m=>{
+        ${members.filter(m=>(b.selections||[]).some(x=>x.memberId===m.id)).map(m=>{
           const sel = (b.selections||[]).find(x=>x.memberId===m.id);
-          const r = sel ? sel.result : '';
-          const stamp = sel && sel.updatedAt && r!=='pending' ? `<span class="sel-stamp">set ${new Date(sel.updatedAt).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>` : '';
-          return `<div class="sel-row"><span>${escapeHtml(m.name)}${stamp}</span>
+          const r = sel.result;
+          const u = selUnits(sel);
+          const bits = [];
+          if(sel.updatedAt && r!=='pending') bits.push('set ' + new Date(sel.updatedAt).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}));
+          if(u!==null) bits.push((u>=0?'+':'−') + Math.abs(u).toFixed(2) + ' units');
+          const stamp = bits.length ? `<span class="sel-stamp">${bits.join(' · ')}</span>` : '';
+          return `<div class="sel-row"><span class="sel-name">${escapeHtml(m.name)}${stamp}</span>
+            <input type="text" class="sel-odds" data-sel-odds="${m.id}" data-odds-bet="${b.id}" value="${escapeHtml(sel.odds||'')}" placeholder="odds" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
             <select data-sel-member="${m.id}" data-sel-bet="${b.id}">
-              <option value="" ${r===''?'selected':''}>Not on bet</option>
               <option value="pending" ${r==='pending'?'selected':''}>⏳ Pending</option>
               <option value="won" ${r==='won'?'selected':''}>✓ Winner</option>
               <option value="lost" ${r==='lost'?'selected':''}>✕ Loser</option>
               <option value="void" ${r==='void'?'selected':''}>Void</option>
+              <option value="">Remove from bet</option>
             </select></div>`;
-        }).join('')}
+        }).join('') || '<div class="empty-note">No betters on this bet yet.</div>'}
+        ${(()=>{
+          const rest = members.filter(m=>!(b.selections||[]).some(x=>x.memberId===m.id));
+          return rest.length ? `<div class="sel-row"><span style="color:var(--ink-soft);">Add a better</span>
+            <select data-add-better="${b.id}">
+              <option value="">Choose member…</option>
+              ${rest.map(m=>`<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')}
+            </select></div>` : '';
+        })()}
         <div class="form-actions">
           <button class="btn primary" data-save-selections="${b.id}">Save Selections</button>
         </div>
@@ -1115,26 +1143,62 @@ function renderBets(){
   list.querySelectorAll('[data-sel-member]').forEach(el=>{
     el.addEventListener('click', (e)=> e.stopPropagation());
   });
+  // Reads the dropdowns/odds boxes for one bet into bet.selections.
+  // Returns an error message (and changes nothing) if validate is on and something's wrong.
+  const collectSelections = (id, extraMemberId, validate)=>{
+    const bet = bets.find(x=>x.id===id);
+    const old = bet.selections || [];
+    const next = [];
+    let error = null;
+    list.querySelectorAll(`[data-sel-bet="${id}"]`).forEach(sel=>{
+      const memberId = sel.getAttribute('data-sel-member');
+      const result = sel.value;
+      if(!result) return;
+      const oddsEl = list.querySelector(`[data-odds-bet="${id}"][data-sel-odds="${memberId}"]`);
+      const odds = oddsEl ? oddsEl.value.trim() : '';
+      const nm = (members.find(m=>m.id===memberId)||{}).name || 'a better';
+      if(validate && !error){
+        if(odds && parseOdds(odds)===null) error = `Odds for ${nm} look wrong — try 8/13, evens or 1.62`;
+        else if((result==='won' || result==='lost') && !odds) error = `Add the odds for ${nm} before marking a result`;
+      }
+      const prev = old.find(o=>o.memberId===memberId);
+      const unchanged = prev && prev.result===result && (prev.odds||'')===odds;
+      next.push({memberId, result, odds, updatedAt: (unchanged && prev.updatedAt) ? prev.updatedAt : new Date().toISOString()});
+    });
+    if(error) return error;
+    if(extraMemberId && !next.some(n=>n.memberId===extraMemberId)){
+      next.push({memberId:extraMemberId, result:'pending', odds:'', updatedAt:new Date().toISOString()});
+    }
+    bet.selections = next;
+    return null;
+  };
+  list.querySelectorAll('[data-sel-odds]').forEach(el=>{
+    el.addEventListener('click', (e)=> e.stopPropagation());
+  });
   list.querySelectorAll('[data-save-selections]').forEach(el=>{
     el.addEventListener('click', async (e)=>{
       e.stopPropagation();
       if(!requireUnlock()) return;
       const id = el.getAttribute('data-save-selections');
-      const bet = bets.find(x=>x.id===id);
-      if(!bet) return;
-      const old = bet.selections || [];
-      const next = [];
-      list.querySelectorAll(`[data-sel-bet="${id}"]`).forEach(sel=>{
-        const memberId = sel.getAttribute('data-sel-member');
-        const result = sel.value;
-        if(!result) return;
-        const prev = old.find(o=>o.memberId===memberId);
-        next.push({memberId, result, updatedAt: (prev && prev.result===result && prev.updatedAt) ? prev.updatedAt : new Date().toISOString()});
-      });
-      bet.selections = next;
+      if(!bets.find(x=>x.id===id)) return;
+      const err = collectSelections(id, null, true);
+      if(err){ showToast(err); return; }
       await saveBets();
       renderBets(); renderLeague();
       showToast('Selections saved');
+    });
+  });
+  list.querySelectorAll('[data-add-better]').forEach(el=>{
+    el.addEventListener('click', (e)=> e.stopPropagation());
+    el.addEventListener('change', async ()=>{
+      const id = el.getAttribute('data-add-better');
+      if(!el.value) return;
+      if(!requireUnlock()){ renderBets(); return; }
+      if(!bets.find(x=>x.id===id)) return;
+      collectSelections(id, el.value, false);
+      await saveBets();
+      renderBets(); renderLeague();
+      showToast('Better added');
     });
   });
   list.querySelectorAll('[id^="betStatusEdit-"]').forEach(el=>{
@@ -1219,19 +1283,56 @@ function renderBets(){
 }
 
 // ---------- Render: League ----------
+// Parses odds typed from a slip: 8/13, evens, or decimal like 1.62.
+// Returns the profit on a 1-unit stake (8/13 -> 0.615), or null if it can't be read.
+function parseOdds(str){
+  if(str===undefined || str===null) return null;
+  const t = String(str).trim().toLowerCase().replace(/\s+/g,'');
+  if(!t) return null;
+  if(t==='evens' || t==='evs' || t==='even') return 1;
+  let m = t.match(/^(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)$/);
+  if(m){
+    const a = parseFloat(m[1]), d = parseFloat(m[2]);
+    return (a>0 && d>0) ? a/d : null;
+  }
+  if(/^\d+(?:\.\d+)?$/.test(t)){
+    const dec = parseFloat(t);
+    return dec>1 ? dec-1 : null;
+  }
+  return null;
+}
+// Units for one selection: winner = +profit, loser = -1, anything else (or no odds) = null.
+function selUnits(sel){
+  if(sel.result==='lost') return parseOdds(sel.odds)!==null ? -1 : null;
+  if(sel.result==='won'){
+    const p = parseOdds(sel.odds);
+    return p!==null ? p : null;
+  }
+  return null;
+}
 function leagueStats(){
-  const stats = members.map(m=>({id:m.id, name:m.name, won:0, lost:0}));
+  const stats = members.map(m=>({id:m.id, name:m.name, won:0, lost:0, units:0}));
+  let missingOdds = 0;
   bets.forEach(b=>{
     (b.selections||[]).forEach(sel=>{
       const row = stats.find(r=>r.id===sel.memberId);
       if(!row) return;
       if(sel.result==='won') row.won++;
       else if(sel.result==='lost') row.lost++;
+      else return;
+      const u = selUnits(sel);
+      if(u===null) missingOdds++; else row.units += u;
     });
   });
   stats.forEach(r=>{ r.played = r.won + r.lost; });
-  stats.sort((a,b)=> b.won-a.won || a.played-b.played || a.name.localeCompare(b.name));
+  stats.sort((a,b)=> (b.units-a.units) || (a.played-b.played) || a.name.localeCompare(b.name));
+  stats.missingOdds = missingOdds;
   return stats;
+}
+function fmtUnits(u){
+  const v = Math.round(u*100)/100;
+  if(v===0) return '0.00';
+  return (v>0?'+':'−') + Math.abs(v).toFixed(2);
 }
 function renderLeague(){
   const host = document.getElementById('leagueTable');
@@ -1242,17 +1343,22 @@ function renderLeague(){
   const stats = leagueStats();
   host.innerHTML = `
     <div class="league-table">
-      <div class="league-head"><span>#</span><span>Member</span><span class="num">P</span><span class="num">W</span><span class="num">L</span></div>
-      ${stats.map((r,i)=>`
-        <div class="league-row ${i===0 && r.won>0 ? 'first' : ''}">
+      <div class="league-head"><span>#</span><span>Member</span><span class="num">P</span><span class="num">W</span><span class="num">L</span><span class="num">Units</span></div>
+      ${stats.map((r,i)=>{
+        const v = Math.round(r.units*100)/100;
+        return `
+        <div class="league-row ${i===0 && r.played>0 && v>0 ? 'first' : ''}">
           <span class="pos">${i+1}</span>
           <span class="nm">${escapeHtml(r.name)}</span>
           <span class="num">${r.played}</span>
           <span class="num w">${r.won}</span>
           <span class="num l">${r.lost}</span>
-        </div>`).join('')}
+          <span class="num u ${v>0?'pos':v<0?'neg':''}">${fmtUnits(r.units)}</span>
+        </div>`;
+      }).join('')}
     </div>
-    <div class="modal-hint" style="margin-top:8px;">P = played, W = winners, L = losers</div>`;
+    <div class="modal-hint" style="margin-top:8px;">P = played, W = winners, L = losers</div>
+    ${stats.missingOdds>0 ? `<div class="modal-hint" style="color:var(--red);">${stats.missingOdds} settled selection${stats.missingOdds===1?' has':'s have'} no odds, so ${stats.missingOdds===1?"isn't":"aren't"} in the Units column yet. Open the bet and add the odds.</div>` : ''}`;
 }
 
 // ---------- Render: Lotto ----------
@@ -1552,12 +1658,18 @@ document.getElementById('showAddBet').addEventListener('click', ()=>{
   document.getElementById('betMember').value = 'GROUP';
   document.getElementById('betComment').value = '';
   document.getElementById('betStatus').value = 'pending';
-  document.querySelectorAll('#betBettersBox input').forEach(i=>i.checked=false);
+  document.querySelectorAll('#betBettersBox input[type=checkbox]').forEach(i=>i.checked=false);
+  document.querySelectorAll('#betBettersBox [data-better-odds]').forEach(i=>{ i.value=''; i.style.display='none'; });
   document.getElementById('betWonAmountRow').style.display = 'none';
   document.getElementById('betWon').value = '';
   document.getElementById('betCountsPaymentRow').style.display = 'none';
   document.getElementById('betCountsPayment').checked = false;
   document.getElementById('addBetForm').classList.add('open');
+});
+document.getElementById('betBettersBox').addEventListener('change', (e)=>{
+  if(e.target.type!=='checkbox') return;
+  const odds = document.querySelector(`[data-better-odds="${e.target.value}"]`);
+  if(odds) odds.style.display = e.target.checked ? 'block' : 'none';
 });
 document.getElementById('betMember').addEventListener('change', (e)=>{
   const isGroup = e.target.value === 'GROUP';
@@ -1584,8 +1696,17 @@ document.getElementById('saveAddBet').addEventListener('click', async ()=>{
   if(!stake || stake<=0){ showToast('Enter a valid stake'); return; }
   const betId = uid();
   const nowIso = new Date().toISOString();
-  const selections = [...document.querySelectorAll('#betBettersBox input:checked')]
-    .map(i=>({memberId:i.value, result:'pending', updatedAt:nowIso}));
+  const selections = [];
+  for(const i of document.querySelectorAll('#betBettersBox input[type=checkbox]:checked')){
+    const oddsEl = document.querySelector(`[data-better-odds="${i.value}"]`);
+    const odds = oddsEl ? oddsEl.value.trim() : '';
+    if(odds && parseOdds(odds)===null){
+      const nm = (members.find(m=>m.id===i.value)||{}).name || 'a better';
+      showToast(`Odds for ${nm} look wrong — try 8/13, evens or 1.62`);
+      return;
+    }
+    selections.push({memberId:i.value, result:'pending', odds, updatedAt:nowIso});
+  }
   bets.push({id:betId, date, placedBy, comment, stake, won, status, countsAsPayment, selections, hasScreenshot:false});
   await saveBets();
   if(countsAsPayment){
@@ -1599,7 +1720,8 @@ document.getElementById('saveAddBet').addEventListener('click', async ()=>{
   document.getElementById('betWonAmountRow').style.display='none';
   document.getElementById('betCountsPayment').checked=false;
   document.getElementById('addBetForm').classList.remove('open');
-  document.querySelectorAll('#betBettersBox input').forEach(i=>i.checked=false);
+  document.querySelectorAll('#betBettersBox input[type=checkbox]').forEach(i=>i.checked=false);
+  document.querySelectorAll('#betBettersBox [data-better-odds]').forEach(i=>{ i.value=''; i.style.display='none'; });
   renderBets(); renderOverview(); renderMembers(); renderLeague();
   showToast(countsAsPayment ? 'Bet logged & counted toward buy-in' : 'Bet logged');
 });
