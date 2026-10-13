@@ -454,6 +454,17 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="delBetOverlay">
+  <div class="modal-card">
+    <div class="modal-title">Delete this bet?</div>
+    <div class="modal-hint" id="delBetHint">This can't be undone.</div>
+    <div class="form-actions">
+      <button class="btn ghost" id="delBetCancelBtn">Cancel</button>
+      <button class="btn primary" id="delBetConfirmBtn" style="background:var(--red);color:#fff;">Yes, Delete Bet</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="clearAllOverlay">
   <div class="modal-card">
     <div class="modal-title">Reset for New Year?</div>
@@ -1128,16 +1139,11 @@ function renderBets(){
       e.stopPropagation();
       if(!requireUnlock()) return;
       const id = el.getAttribute('data-del-bet');
-      bets = bets.filter(b=>b.id!==id);
-      const hadLinkedPayment = payments.some(p=>p.linkedBetId===id);
-      payments = payments.filter(p=>p.linkedBetId!==id);
-      await deleteBetScreenshot(id);
-      delete betScreenshots[id];
-      await saveBets();
-      if(hadLinkedPayment) await savePayments();
-      if(openBetId===id) openBetId = null;
-      renderBets(); renderOverview(); renderMembers();
-      showToast('Bet removed');
+      pendingDelBetId = id;
+      const b = bets.find(x=>x.id===id);
+      const hint = document.getElementById('delBetHint');
+      if(hint) hint.textContent = (b ? 'Bet from '+(b.date||'')+(b.stake!=null?' (stake £'+b.stake+')':'')+'. ' : '')+"This also removes its screenshot, any linked payment and league selections. This can't be undone.";
+      document.getElementById('delBetOverlay').classList.add('open');
     });
   });
   list.querySelectorAll('[data-sel-member]').forEach(el=>{
@@ -1928,6 +1934,30 @@ async function autoGenerateLottoEntries(){
     showToast(created===1 ? "Added today's Lotto entry automatically" : `Added ${created} automatic Lotto entries`);
   }
 }
+
+// ---------- Bet delete confirmation ----------
+let pendingDelBetId = null;
+(function(){
+  const ov = document.getElementById('delBetOverlay');
+  const close = ()=>{ ov.classList.remove('open'); pendingDelBetId = null; };
+  document.getElementById('delBetCancelBtn').addEventListener('click', close);
+  ov.addEventListener('click', e=>{ if(e.target===ov) close(); });
+  document.getElementById('delBetConfirmBtn').addEventListener('click', async ()=>{
+    const id = pendingDelBetId;
+    close();
+    if(!id) return;
+    bets = bets.filter(b=>b.id!==id);
+    const hadLinkedPayment = payments.some(p=>p.linkedBetId===id);
+    payments = payments.filter(p=>p.linkedBetId!==id);
+    await deleteBetScreenshot(id);
+    delete betScreenshots[id];
+    await saveBets();
+    if(hadLinkedPayment) await savePayments();
+    if(openBetId===id) openBetId = null;
+    renderBets(); renderOverview(); renderMembers(); renderLeague();
+    showToast('Bet removed');
+  });
+})();
 
 // ---------- New Year Reset ----------
 document.getElementById('showClearAll').addEventListener('click', ()=>{
