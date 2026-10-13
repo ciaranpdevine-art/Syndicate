@@ -1090,8 +1090,9 @@ function renderBets(){
           <button class="btn primary" data-save-bet-status="${b.id}">Update Result</button>
         </div>
         <div class="sel-title">League selections</div>
-        ${members.filter(m=>(b.selections||[]).some(x=>x.memberId===m.id)).map(m=>{
-          const sel = (b.selections||[]).find(x=>x.memberId===m.id);
+        ${(b.selections||[]).map((sel,idx)=>{
+          const m = members.find(mm=>mm.id===sel.memberId);
+          if(!m) return '';
           const r = sel.result;
           const u = selUnits(sel);
           const bits = [];
@@ -1099,18 +1100,18 @@ function renderBets(){
           if(u!==null) bits.push((u>=0?'+':'−') + Math.abs(u).toFixed(2) + ' units');
           const stamp = bits.length ? `<span class="sel-stamp">${bits.join(' · ')}</span>` : '';
           return `<div class="sel-row"><span class="sel-name">${escapeHtml(m.name)}${stamp}</span>
-            <input type="text" class="sel-odds" data-sel-odds="${m.id}" data-odds-bet="${b.id}" value="${escapeHtml(sel.odds||'')}" placeholder="odds" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
-            <select data-sel-member="${m.id}" data-sel-bet="${b.id}">
+            <input type="text" class="sel-odds" data-sel-odds="${idx}" data-odds-bet="${b.id}" value="${escapeHtml(sel.odds||'')}" placeholder="odds" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+            <select data-sel-member="${m.id}" data-sel-idx="${idx}" data-sel-bet="${b.id}">
               <option value="pending" ${r==='pending'?'selected':''}>⏳ Pending</option>
               <option value="won" ${r==='won'?'selected':''}>✓ Winner</option>
               <option value="lost" ${r==='lost'?'selected':''}>✕ Loser</option>
               <option value="void" ${r==='void'?'selected':''}>Void</option>
               <option value="">Remove from bet</option>
             </select></div>`;
-        }).join('') || '<div class="empty-note">No betters on this bet yet.</div>'}
+        }).join('') || '<div class="empty-note">No selections on this bet yet.</div>'}
         ${(()=>{
-          const rest = members.filter(m=>!(b.selections||[]).some(x=>x.memberId===m.id));
-          return rest.length ? `<div class="sel-row"><span style="color:var(--ink-soft);">Add a better</span>
+          const rest = members;
+          return rest.length ? `<div class="sel-row"><span style="color:var(--ink-soft);">Add a selection</span>
             <select data-add-better="${b.id}">
               <option value="">Choose member…</option>
               ${rest.map(m=>`<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')}
@@ -1160,20 +1161,26 @@ function renderBets(){
       const memberId = sel.getAttribute('data-sel-member');
       const result = sel.value;
       if(!result) return;
-      const oddsEl = list.querySelector(`[data-odds-bet="${id}"][data-sel-odds="${memberId}"]`);
+      const idx = sel.getAttribute('data-sel-idx');
+      const oddsEl = list.querySelector(`[data-odds-bet="${id}"][data-sel-odds="${idx}"]`);
       const odds = oddsEl ? oddsEl.value.trim() : '';
       const nm = (members.find(m=>m.id===memberId)||{}).name || 'a better';
       if(validate && !error){
         if(odds && parseOdds(odds)===null) error = `Odds for ${nm} look wrong — try 8/13, evens or 1.62`;
         else if((result==='won' || result==='lost') && !odds) error = `Add the odds for ${nm} before marking a result`;
       }
-      const prev = old.find(o=>o.memberId===memberId);
-      const unchanged = prev && prev.result===result && (prev.odds||'')===odds;
+      const prev = old[parseInt(idx,10)];
+      const sameMember = prev && prev.memberId===memberId;
+      const unchanged = sameMember && prev.result===result && (prev.odds||'')===odds;
       next.push({memberId, result, odds, updatedAt: (unchanged && prev.updatedAt) ? prev.updatedAt : new Date().toISOString()});
     });
     if(error) return error;
-    if(extraMemberId && !next.some(n=>n.memberId===extraMemberId)){
-      next.push({memberId:extraMemberId, result:'pending', odds:'', updatedAt:new Date().toISOString()});
+    if(extraMemberId){
+      // insert next to that member's existing selection(s) so a second pick sits beside the first
+      let at = -1;
+      next.forEach((n,i)=>{ if(n.memberId===extraMemberId) at = i; });
+      const ns = {memberId:extraMemberId, result:'pending', odds:'', updatedAt:new Date().toISOString()};
+      if(at>=0) next.splice(at+1,0,ns); else next.push(ns);
     }
     bet.selections = next;
     return null;
@@ -1204,7 +1211,7 @@ function renderBets(){
       collectSelections(id, el.value, false);
       await saveBets();
       renderBets(); renderLeague();
-      showToast('Better added');
+      showToast('Selection added');
     });
   });
   list.querySelectorAll('[id^="betStatusEdit-"]').forEach(el=>{
